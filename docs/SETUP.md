@@ -52,8 +52,8 @@ sudo apt-get install git python3 tzdata
 Clone the public source and enter the controller directory:
 
 ```bash
-git clone https://github.com/polarvapourer/NetTime-Portfolio.git
-cd NetTime-Portfolio/controller
+git clone https://github.com/polarvapourer/NetTime.git
+cd NetTime/controller
 ```
 
 No `npm install` or `pip install` is needed on the Pi. The controller is independent of the React planner.

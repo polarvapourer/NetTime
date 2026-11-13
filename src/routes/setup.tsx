@@ -8,7 +8,7 @@ export const Route = createFileRoute("/setup")({
 });
 
 const ZIP = "nettime-pi-0.2.0.zip";
-const guide = "https://github.com/polarvapourer/NetTime-Portfolio/blob/main/docs/SETUP.md";
+const guide = "https://github.com/polarvapourer/NetTime/blob/main/docs/SETUP.md";
 
 function SetupPage() {
   return (
@@ -22,8 +22,8 @@ function SetupPage() {
       </section>
       <section className="panel space-y-3">
         <h2 className="font-semibold">Source installation on the Pi</h2>
-        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">{`git clone https://github.com/polarvapourer/NetTime-Portfolio.git
-cd NetTime-Portfolio/controller
+        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">{`git clone https://github.com/polarvapourer/NetTime.git
+cd NetTime/controller
 python3 -m nettime setup --router YOUR_ROUTER_ADDRESS
 python3 -m nettime doctor
 sh ./install-service.sh`}</pre>

@@ -3,7 +3,7 @@
 Python standard-library service for per-device internet allowances on a compatible Linksys JNAP router. Public distribution 0.2.0. The dashboard binds to `127.0.0.1:8787`; access it through SSH.
 
 The complete headless Wi-Fi, source-install and troubleshooting guide is at:
-https://github.com/polarvapourer/NetTime-Portfolio/blob/main/docs/SETUP.md
+https://github.com/polarvapourer/NetTime/blob/main/docs/SETUP.md
 
 ## Install this portable package
 

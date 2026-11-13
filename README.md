@@ -17,8 +17,8 @@ There are two independent interfaces. The **web planner** runs entirely in the b
 Requires Node.js 22.12 or newer and npm. No account, API key, router or Raspberry Pi is needed.
 
 ```bash
-git clone https://github.com/polarvapourer/NetTime-Portfolio.git
-cd NetTime-Portfolio
+git clone https://github.com/polarvapourer/NetTime.git
+cd NetTime
 npm ci
 npm run dev
 ```
