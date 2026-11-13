@@ -54,7 +54,7 @@ py -3 scripts/build_controller_zip.py
 python3 scripts/build_controller_zip.py
 ```
 
-All platforms produce the same source-only `public/downloads/nettime-controller-0.3.0.zip`. There is no separate M1, Intel, Windows or Pi binary. Download the release ZIP instead if you do not want to build it. `build_pi_zip.py`, `package:pi` and the stable `nettime-pi.zip` URL remain compatibility aliases.
+All platforms produce the same source-only `public/downloads/nettime-controller-1.1.0.zip`. There is no separate M1, Intel, Windows or Pi binary. Download the release ZIP instead if you do not want to build it. `build_pi_zip.py`, `package:pi` and the stable `nettime-pi.zip` URL remain compatibility aliases.
 
 ## 2. Put the controller on the device that will stay on
 
@@ -63,7 +63,7 @@ If it is the same computer, enter `NetTime/controller` and skip the transfer. If
 For a separate macOS/Linux/Pi controller with SSH already configured, this works from Windows PowerShell, macOS Terminal or Linux. Replace both placeholders:
 
 ```text
-scp public/downloads/nettime-controller-0.3.0.zip YOUR_USER@YOUR_CONTROLLER:nettime-controller.zip
+scp public/downloads/nettime-controller-1.1.0.zip YOUR_USER@YOUR_CONTROLLER:nettime-controller.zip
 ssh YOUR_USER@YOUR_CONTROLLER
 ```
 
@@ -77,7 +77,7 @@ cd ~/nettime
 For a Windows controller, copy the ZIP to its Downloads folder, open PowerShell **on that controller** and run:
 
 ```powershell
-py -3 -m zipfile -e "$env:USERPROFILE\Downloads\nettime-controller-0.3.0.zip" "$env:USERPROFILE\nettime"
+py -3 -m zipfile -e "$env:USERPROFILE\Downloads\nettime-controller-1.1.0.zip" "$env:USERPROFILE\nettime"
 cd "$env:USERPROFILE\nettime"
 ```
 

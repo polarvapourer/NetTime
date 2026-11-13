@@ -1,4 +1,4 @@
-# NetTime controller 0.3.0
+# NetTime controller 1.1.0
 
 Run this Python controller on a separate always-on computer or on your main computer: Windows, macOS on Apple Silicon (M1 and newer) or Intel, and Linux including Raspberry Pi OS. Your management/build computer can use any of those platforms independently. No Pi or Node.js is required to run the controller.
 
