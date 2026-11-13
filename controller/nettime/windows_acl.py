@@ -3,6 +3,7 @@
 No chmod-based permission claims on Windows. Fail if ACLs cannot be applied.
 """
 import ctypes
+import os
 from ctypes import wintypes as W
 
 
@@ -20,6 +21,9 @@ def _api():
     adv.SetNamedSecurityInfoW.restype = W.DWORD
     adv.GetNamedSecurityInfoW.argtypes = [W.LPCWSTR, ctypes.c_int, W.DWORD, ptr, ptr, ptr, ptr, ctypes.POINTER(ptr)]
     adv.GetNamedSecurityInfoW.restype = W.DWORD
+    adv.GetSecurityDescriptorControl.argtypes = [ptr, ctypes.POINTER(W.WORD), ctypes.POINTER(W.DWORD)]
+    adv.GetAclInformation.argtypes = [ptr, ptr, W.DWORD, ctypes.c_int]
+    adv.GetAce.argtypes = [ptr, W.DWORD, ctypes.POINTER(ptr)]
     kernel.GetCurrentProcess.restype = W.HANDLE
     kernel.CloseHandle.argtypes = [W.HANDLE]
     kernel.LocalFree.argtypes = [ptr]
@@ -70,18 +74,41 @@ def protect(path, directory=False):
 
 def private_ok(path):
     adv, kernel = _api()
-    sd, text = ctypes.c_void_p(), W.LPWSTR()
-    error = adv.GetNamedSecurityInfoW(str(path), 1, 4, None, None, None, None, ctypes.byref(sd))
+    sd, dacl = ctypes.c_void_p(), ctypes.c_void_p()
+    error = adv.GetNamedSecurityInfoW(str(path), 1, 4, None, None, ctypes.byref(dacl), None, ctypes.byref(sd))
     if error:
         raise ctypes.WinError(error)
     try:
-        _check(adv.ConvertSecurityDescriptorToStringSecurityDescriptorW(sd, 1, 4, ctypes.byref(text), None))
-        try:
-            # Compare complete protected DACL, ignoring only inheritance flags on the two ACEs.
-            value = text.value.replace("OICI", "").replace("ID", "")
-            expected = "D:P(A;;FA;;;SY)(A;;FA;;;%s)" % current_sid()
-            return value == expected
-        finally:
-            kernel.LocalFree(text)
+        control, revision = W.WORD(), W.DWORD()
+        _check(adv.GetSecurityDescriptorControl(sd, ctypes.byref(control), ctypes.byref(revision)))
+        if not dacl or not control.value & 0x1000:  # SE_DACL_PROTECTED; no inherited broad grants
+            return False
+        class AclSize(ctypes.Structure):
+            _fields_ = [('count', W.DWORD), ('used', W.DWORD), ('free', W.DWORD)]
+        size = AclSize()
+        _check(adv.GetAclInformation(dacl, ctypes.byref(size), ctypes.sizeof(size), 2))
+        wanted = {current_sid(), 'S-1-5-18'}  # this account and SYSTEM
+        seen = set()
+        for index in range(size.count):
+            ace = ctypes.c_void_p()
+            _check(adv.GetAce(dacl, index, ctypes.byref(ace)))
+            address = ace.value
+            kind = ctypes.c_ubyte.from_address(address).value
+            flags = ctypes.c_ubyte.from_address(address + 1).value
+            mask = W.DWORD.from_address(address + 4).value
+            if kind != 0 or mask != 0x1f01ff or flags & 0x0c:  # full allow ACE, applies to this object
+                return False
+            if os.path.isdir(path) and flags & 3 != 3:  # child files must inherit protection
+                return False
+            text = W.LPWSTR()
+            _check(adv.ConvertSidToStringSidW(ctypes.c_void_p(address + 8), ctypes.byref(text)))
+            try:
+                sid = text.value
+                if sid not in wanted:
+                    return False
+                seen.add(sid)
+            finally:
+                kernel.LocalFree(text)
+        return seen == wanted
     finally:
         kernel.LocalFree(sd)

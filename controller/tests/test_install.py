@@ -41,7 +41,7 @@ class Install(unittest.TestCase):
                 text = f.read()
             self.assertIn("User=pi", text)
             self.assertIn("-m nettime serve", text)
-            self.assertIn("WorkingDirectory=" + '"%s"' % pkg, text)
+            self.assertIn("WorkingDirectory=" + '"%s"' % os.path.realpath(pkg), text)
             with open(log) as f:
                 calls = f.read()
             self.assertIn("enable nettime", calls)
