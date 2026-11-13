@@ -1,5 +1,7 @@
 # NetTime
 
+Public release **1.0.0**. See [release numbering](docs/RELEASING.md).
+
 Per-device internet allowances for a home network, with a local Raspberry Pi controller and a browser-based schedule planner.
 
 ## What it does
@@ -46,7 +48,7 @@ Build a portable controller package with:
 python3 scripts/build_pi_zip.py
 ```
 
-The generated `public/downloads/nettime-pi-0.2.0.zip` contains the controller, its tests and setup instructions. It contains no saved configuration. The public package uses generic examples; it is separate from existing private installations.
+The generated `public/downloads/nettime-pi-1.0.0.zip` contains the controller, its tests and setup instructions. It contains no saved configuration. The public package uses generic examples; it is separate from existing private installations.
 
 ## How it works
 

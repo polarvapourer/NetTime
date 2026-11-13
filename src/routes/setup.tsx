@@ -7,7 +7,7 @@ export const Route = createFileRoute("/setup")({
   component: SetupPage,
 });
 
-const ZIP = "nettime-pi-0.2.0.zip";
+const ZIP = "nettime-pi-1.0.0.zip";
 const guide = "https://github.com/polarvapourer/NetTime/blob/main/docs/SETUP.md";
 
 function SetupPage() {

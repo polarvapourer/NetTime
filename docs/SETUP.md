@@ -163,4 +163,4 @@ Stopping the service alone does not remove a router deny entry. If the Pi is una
 
 ## Alternative: install a portable ZIP
 
-Download `public/downloads/nettime-pi-0.2.0.zip` using GitHub's **Download raw file** button, or build it from source with `python3 scripts/build_pi_zip.py`. Review [the packaged installation instructions](../controller/README.md). This route avoids cloning the whole project on the Pi.
+Download `public/downloads/nettime-pi-1.0.0.zip` using GitHub's **Download raw file** button, or build it from source with `python3 scripts/build_pi_zip.py`. Review [the packaged installation instructions](../controller/README.md). This route avoids cloning the whole project on the Pi.

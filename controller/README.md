@@ -1,6 +1,6 @@
 # NetTime local controller
 
-Python standard-library service for per-device internet allowances on a compatible Linksys JNAP router. Public distribution 0.2.0. The dashboard binds to `127.0.0.1:8787`; access it through SSH.
+Python standard-library service for per-device internet allowances on a compatible Linksys JNAP router. Public distribution 1.0.0. The dashboard binds to `127.0.0.1:8787`; access it through SSH.
 
 The complete headless Wi-Fi, source-install and troubleshooting guide is at:
 https://github.com/polarvapourer/NetTime/blob/main/docs/SETUP.md
@@ -11,19 +11,19 @@ Use a supported Raspberry Pi OS, Python 3, systemd and a Pi connected to your ho
 
 Replace `YOUR_PI_USER`, `nettime.local` and `YOUR_ROUTER_ADDRESS` with your own values. The examples contain no saved household addresses.
 
-In **Windows PowerShell**, after downloading `nettime-pi-0.2.0.zip`:
+In **Windows PowerShell**, after downloading `nettime-pi-1.0.0.zip`:
 
 ```powershell
 $PiUser = "YOUR_PI_USER"
 $PiHost = "nettime.local"
-scp "$env:USERPROFILE\Downloads\nettime-pi-0.2.0.zip" "${PiUser}@${PiHost}:~/"
+scp "$env:USERPROFILE\Downloads\nettime-pi-1.0.0.zip" "${PiUser}@${PiHost}:~/"
 ssh "${PiUser}@${PiHost}"
 ```
 
 In the **Pi SSH session**:
 
 ```bash
-python3 -m zipfile -e ~/nettime-pi-0.2.0.zip ~/nettime
+python3 -m zipfile -e ~/nettime-pi-1.0.0.zip ~/nettime
 cd ~/nettime
 python3 -m nettime setup --router YOUR_ROUTER_ADDRESS
 python3 -m nettime doctor
