@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetTime — Home controller</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="top"><strong>NetTime</strong><span id="mode-pill" class="pill warn">Not signed in</span></header>
+<main>
+  <section id="login" class="panel">
+    <h1>Sign in</h1>
+    <p class="muted">Paste the access key shown by <code>python3 -m nettime setup</code>. It is kept only in this browser tab.</p>
+    <form id="login-form"><input id="key" type="password" autocomplete="off" maxlength="200" placeholder="Access key"><button>Open</button></form>
+    <p id="login-err" class="err"></p>
+  </section>
+  <div id="app" hidden>
+    <p id="lost" class="notice warn" hidden>Pi connection lost — displayed state is stale. The Pi keeps running its schedule on its own; this page reconnects automatically. Changes are disabled until then.</p>
+    <p id="msg" class="notice" hidden></p>
+    <section class="panel">
+      <h2>Status</h2>
+      <dl id="status" class="grid"></dl>
+      <p id="paused" class="notice warn" hidden></p>
+    </section>
+    <section class="panel">
+      <h2>Blocking</h2>
+      <p id="enf-text" class="muted"></p>
+      <ul id="problems" class="muted"></ul>
+      <button id="enf-btn"></button> <button id="resume-btn" class="outline" hidden>Check router and resume</button> <button id="release-btn" class="outline" hidden>Retry removing block</button>
+    </section>
+    <section class="panel">
+      <h2>Device</h2>
+      <p class="muted">Pick the iPad by its Wi-Fi address (Settings › Wi-Fi › ⓘ on the iPad). Use a fixed address for your home network, not rotating.</p>
+      <div class="row"><span id="sel-summary">No device selected</span> <button id="unselect-btn" class="ghost" hidden>Unselect device</button></div>
+      <p id="unselect-why" class="muted" hidden></p>
+      <button id="discover" class="outline">Find devices</button>
+      <div id="devices"></div>
+    </section>
+    <section class="panel">
+      <h2>Schedule</h2>
+      <p class="muted">Time counted = minutes the router shows the iPad connected and allowed, including idle time (e.g. overnight). It is not screen time.</p>
+      <div class="row"><label>Weekdays <input id="bulk-wd" type="number" min="0" max="1440" placeholder="min"></label><button id="bulk-wd-btn" class="outline">Fill Mon–Fri</button>
+      <label>Weekend <input id="bulk-we" type="number" min="0" max="1440" placeholder="min"></label><button id="bulk-we-btn" class="outline">Fill Sat–Sun</button></div>
+      <div id="days" class="days"></div>
+      <h3>Exception windows</h3>
+      <div id="exceptions"></div>
+      <label class="check"><input id="paused-box" type="checkbox"> Pause leisure access (exception windows still allowed)</label>
+      <button id="save">Save schedule</button>
+    </section>
+    <section class="panel">
+      <h2>Today's extra time</h2>
+      <div class="row"><input id="bonus" type="number" min="1" max="1440" value="15"><button id="bonus-btn" class="outline">Add minutes</button><button id="bonus-clear" class="ghost">Clear</button></div>
+    </section>
+    <section class="panel">
+      <h2>Import / export</h2>
+      <p class="muted">Settings from the online NetTime dashboard don't sync by themselves. Export there, import here. This page is the one that counts.</p>
+      <div class="row"><input id="import-file" type="file" accept="application/json,.json"><button id="export" class="outline">Export</button></div>
+    </section>
+  </div>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+:root{--bg:#0d1526;--panel:#14203a;--border:#24324f;--fg:#e6ecf5;--muted:#93a1ba;--teal:#2dd4bf;--warn:#f5b84b;--bad:#f87171}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
+.top{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border)}
+main{max-width:860px;margin:0 auto;padding:20px 16px 60px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px}
+h1,h2{margin:0 0 10px;font-size:18px}h3{font-size:15px;margin:16px 0 8px}
+.muted{color:var(--muted);font-size:14px}.err{color:var(--bad)}
+.pill{border:1px solid;border-radius:999px;padding:3px 10px;font-size:12px}.pill.warn{color:var(--warn)}.pill.ok{color:var(--teal)}.pill.bad{color:var(--bad)}
+button{background:var(--teal);color:#05201c;border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+button.outline{background:transparent;color:var(--fg);border:1px solid var(--border)}button.ghost{background:transparent;color:var(--muted)}
+button:disabled{opacity:.5}
+input{background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:7px 9px;font:inherit}
+input[type=number]{width:90px}.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:0}
+.grid div{background:var(--bg);border-radius:8px;padding:8px 10px}.grid dt{color:var(--muted);font-size:12px}.grid dd{margin:0}
+.days{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.days label{display:flex;flex-direction:column;font-size:13px;color:var(--muted)}
+.notice{border:1px solid var(--border);border-radius:8px;padding:10px 12px}.notice.warn{border-color:var(--warn)}
+.dev{display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--border);padding:8px 0;font-size:14px}
+.check{display:block;margin:12px 0}code{color:var(--teal)}
