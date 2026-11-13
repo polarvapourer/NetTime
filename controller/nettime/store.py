@@ -1,17 +1,39 @@
-"""Owner-only durable storage (directory 0700, files 0600, atomic replace)."""
+"""Private durable storage: POSIX modes or Windows DACLs, with atomic replace."""
 import json
 import os
 import stat
+import sys
 
 from .policy import default_settings, validate_settings
 from .macs import canonical_mac
 
-DEFAULT_DIR = os.path.join(os.path.expanduser("~"), ".local", "share", "nettime")
+def default_dir():
+    home = os.path.expanduser("~")
+    legacy = os.path.join(home, ".local", "share", "nettime")
+    # Never silently abandon a previous installation's credentials or block ownership.
+    if os.path.isfile(os.path.join(legacy, "config.json")):
+        return legacy
+    if os.name == "nt":
+        return os.path.join(os.environ.get("LOCALAPPDATA", os.path.join(home, "AppData", "Local")), "NetTime")
+    if sys.platform == "darwin":
+        return os.path.join(home, "Library", "Application Support", "NetTime")
+    return legacy
+
+
+DEFAULT_DIR = default_dir()
+
+
+def restrict(path, directory=False):
+    if os.name == "nt":
+        from .windows_acl import protect
+        protect(path, directory)
+    else:
+        os.chmod(path, 0o700 if directory else 0o600)
 
 
 def ensure_private_dir(path):
     os.makedirs(path, mode=0o700, exist_ok=True)
-    os.chmod(path, 0o700)
+    restrict(path, directory=True)
 
 
 def atomic_write_json(path, obj):
@@ -21,7 +43,7 @@ def atomic_write_json(path, obj):
         json.dump(obj, f, indent=1, sort_keys=True)
         f.flush()
         os.fsync(f.fileno())
-    os.chmod(tmp, 0o600)
+    restrict(tmp)
     os.replace(tmp, path)
     try:
         dfd = os.open(os.path.dirname(path) or ".", os.O_RDONLY)
@@ -39,6 +61,9 @@ def read_json(path):
 
 
 def private_ok(path, want):
+    if os.name == "nt":
+        from .windows_acl import private_ok as acl_ok
+        return acl_ok(path)
     return stat.S_IMODE(os.stat(path).st_mode) == want
 
 

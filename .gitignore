@@ -31,7 +31,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# NetTime Pi controller local data (credential-equivalent)
+# NetTime controller local data (credential-equivalent)
 __pycache__/
 *.pyc
 controller/data/
@@ -44,7 +44,7 @@ controller/data/
 *.pem
 *.key
 
-# Pi controller private config/state/runtime (also lives outside repo in ~/.local/share/nettime)
+# Controller private config/state/runtime (also lives outside repo in ~/.local/share/nettime)
 controller/**/config.json
 controller/**/state.json
 controller/**/*.tmp

@@ -1,2 +1,2 @@
-"""NetTime home controller for a Raspberry Pi (Python 3.7+, standard library only)."""
-VERSION = "0.2.0"
+"""NetTime home controller (Windows, macOS and Linux; Python standard library)."""
+VERSION = "0.3.0"

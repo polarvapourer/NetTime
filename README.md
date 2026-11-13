@@ -1,6 +1,6 @@
 # NetTime
 
-Per-device internet allowances for a home network, with a local Raspberry Pi controller and a browser-based schedule planner.
+Per-device internet allowances for a home network, with a local Windows, macOS or Linux controller and a browser-based schedule planner.
 
 ## What it does
 
@@ -10,7 +10,7 @@ Per-device internet allowances for a home network, with a local Raspberry Pi con
 - Apply a deny-list rule to one selected device through a compatible router.
 - Keep credentials and usage records on the controller, with access through an SSH tunnel.
 
-There are two independent interfaces. The **web planner** runs entirely in the browser, stores settings in localStorage and previews policy decisions. It does not contact a router or measure real usage. The **Pi dashboard** belongs to the Python service and controls the router. Export a schedule from the planner and import it into the Pi dashboard to transfer it.
+There are two independent interfaces. The **web planner** runs entirely in the browser, stores settings in localStorage and previews policy decisions. It does not contact a router or measure real usage. The **controller dashboard** belongs to the Python service and controls the router. Export a schedule from the planner and import it into the controller dashboard to transfer it.
 
 ## Try the planner
 
@@ -36,25 +36,27 @@ The production planner is a static site in `dist/`. A host must serve `index.htm
 
 ## Install the controller
 
-Follow the [Raspberry Pi setup guide](docs/SETUP.md). It covers headless Wi-Fi setup, router compatibility, installation, selecting a device, checking enforcement, updates and recovery.
+Follow the [cross-platform setup guide](docs/SETUP.md). It separates the management/build computer from the always-on controller, with Windows, Linux, Apple Silicon macOS and Intel macOS instructions for both. The controller may be a separate secondary device; a Raspberry Pi is optional.
 
-The controller requires Python 3.7+ and uses only the standard library. Use a currently supported Raspberry Pi OS for a new installation. The adapter was tested with a Linksys/Community Fibre M60CF-EU router; other firmware and router models require separate validation.
+The controller requires Python 3.7+ and uses only the standard library. Use a currently supported OS and Python for a new installation. The built-in adapter was tested with a Linksys/Community Fibre M60CF-EU router; other firmware and router models require separate validation.
 
 Build a portable controller package with:
 
 ```bash
-python3 scripts/build_pi_zip.py
+npm run package:controller
 ```
 
-The generated `public/downloads/nettime-pi-0.2.0.zip` contains the controller, its tests and setup instructions. It contains no saved configuration. The public package uses generic examples; it is separate from existing private installations.
+The generated `public/downloads/nettime-controller-0.3.0.zip` contains the controller, its tests and setup instructions. It contains no saved configuration. The public package uses generic examples; it is separate from existing private installations.
+
+The package contains Python source, not architecture-specific binaries. You can build it on one OS and run it on another with a native Python installation. Do not transfer `node_modules` across OS/CPU boundaries. See [router compatibility and adding a driver](controller/ROUTERS.md): there is no universal blocking API, and other brands need an implemented and validated adapter.
 
 ## How it works
 
 ```mermaid
 flowchart TD
-  A[Owner browser] -->|SSH tunnel| B[Pi loopback dashboard]
+  A[Owner browser] -->|SSH tunnel| B[Controller loopback dashboard]
   B --> C[Policy and allowance accounting]
-  C -->|Pinned HTTPS JNAP| D[Compatible router]
+  C -->|Router adapter| D[Compatible router]
   D -->|Selected deny-list entry| E[Selected device]
 ```
 
@@ -86,7 +88,7 @@ The original controller's block and restore path was also checked manually on on
 
 ## Scope
 
-This is a portfolio project and an experimental home-network tool. It depends on the Pi remaining powered and connected, a stable client Wi-Fi address and the router's local API. A changed MAC address, another network or mobile data can bypass the rule. It does not provide a Wi-Fi extender or a universal parental-control service.
+This is a portfolio project and an experimental home-network tool. It depends on the controller device remaining powered and connected, a stable client Wi-Fi address and the router's local API. A changed MAC address, another network or mobile data can bypass the rule. It does not provide a Wi-Fi extender or a universal parental-control service.
 
 ## Repository layout
 
@@ -96,5 +98,5 @@ This is a portfolio project and an experimental home-network tool. It depends on
 | `src/routes/` | Planner, schedule editor and policy preview |
 | `controller/nettime/` | Scheduler, JNAP adapter, local HTTP service and storage |
 | `controller/tests/` | Router, security, policy and installation regression tests |
-| `scripts/build_pi_zip.py` | Reproducible controller package builder |
+| `scripts/build_controller_zip.py` | Reproducible controller package builder |
 | `docs/` | Setup, architecture and example screenshots |

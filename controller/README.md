@@ -1,80 +1,58 @@
-# NetTime local controller
+# NetTime controller 0.3.0
 
-Python standard-library service for per-device internet allowances on a compatible Linksys JNAP router. Public distribution 0.2.0. The dashboard binds to `127.0.0.1:8787`; access it through SSH.
+Run this Python controller on a separate always-on computer or on your main computer: Windows, macOS on Apple Silicon (M1 and newer) or Intel, and Linux including Raspberry Pi OS. Your management/build computer can use any of those platforms independently. No Pi or Node.js is required to run the controller.
 
-The complete headless Wi-Fi, source-install and troubleshooting guide is at:
+The full guide covers both roles, transfers in either direction, background startup, router adapters and recovery:
 https://github.com/polarvapourer/NetTime/blob/main/docs/SETUP.md
 
-## Install this portable package
+## Start from this package directory
 
-Use a supported Raspberry Pi OS, Python 3, systemd and a Pi connected to your home network. Code compatibility starts at Python 3.7, but an old unsupported OS is not recommended for a new deployment. Router compatibility has been checked on an M60CF-EU; other models and firmware need separate validation.
-
-Replace `YOUR_PI_USER`, `nettime.local` and `YOUR_ROUTER_ADDRESS` with your own values. The examples contain no saved household addresses.
-
-In **Windows PowerShell**, after downloading `nettime-pi-0.2.0.zip`:
+On Windows PowerShell:
 
 ```powershell
-$PiUser = "YOUR_PI_USER"
-$PiHost = "nettime.local"
-scp "$env:USERPROFILE\Downloads\nettime-pi-0.2.0.zip" "${PiUser}@${PiHost}:~/"
-ssh "${PiUser}@${PiHost}"
+py -3 -m nettime setup --router YOUR_ROUTER_ADDRESS
+py -3 -m nettime doctor
+py -3 -m nettime serve
 ```
 
-In the **Pi SSH session**:
+On macOS (Apple Silicon or Intel), Linux or Raspberry Pi:
 
 ```bash
-python3 -m zipfile -e ~/nettime-pi-0.2.0.zip ~/nettime
-cd ~/nettime
 python3 -m nettime setup --router YOUR_ROUTER_ADDRESS
 python3 -m nettime doctor
-sh ./install-service.sh
+python3 -m nettime serve
 ```
 
-Setup displays the router certificate fingerprint, asks before pinning it, prompts for the router password without echoing it and performs a read-only test. Verify the intended router and fingerprint before trusting it. Save the displayed dashboard access key privately.
+The built-in adapter targets compatible Linksys JNAP routers. Only M60CF-EU has a recorded live block/restore check. Other brands need an adapter implementing their actual management interface; there is no universal blocking API. Read `ROUTERS.md` in this package before using another router.
 
-In a **new Windows PowerShell window**:
+Setup pins the router certificate after your confirmation and reads its settings without enabling blocking. Keep the displayed dashboard key private. The password prompt is hidden. Stop foreground operation with Ctrl+C before optionally running `service install` using the same Python command.
 
-```powershell
-$PiUser = "YOUR_PI_USER"
-$PiHost = "nettime.local"
-ssh -N -L 8787:127.0.0.1:8787 "${PiUser}@${PiHost}"
+| Host | Background startup |
+| --- | --- |
+| Linux with systemd | `python3 -m nettime service install`: boot service as your normal user; sudo needed to install |
+| macOS | `python3 -m nettime service install`: LaunchAgent at login, while the user remains logged in |
+| Windows | `py -3 -m nettime service install`: Task Scheduler at sign-in, while the user remains signed in |
+
+Use `service status`, `start`, `stop`, `restart`, or `remove` to manage it. Windows/macOS user jobs do not run after logout. Foreground operation works without these optional installers. Keep the host awake and connected; a terminal on a sleeping or powered-off device cannot enforce a schedule.
+
+## Dashboard and validation
+
+On the controller itself, open http://127.0.0.1:8787. From a different Windows/Mac/Linux computer with SSH access configured, run:
+
+```text
+ssh -N -L 8787:127.0.0.1:8787 YOUR_USER@YOUR_CONTROLLER
 ```
 
-Leave the window open and visit http://127.0.0.1:8787. Enter your access key. No public port or firewall rule is needed.
+Leave the tunnel running, then open the same address on that computer. Enter the dashboard access key. No public port is needed. Closing your management computer does not stop a separate controller.
 
-## Configure and validate
+Keep blocking off while selecting a device and setting all seven allowances. Verify its stable per-network address, edit the sample Study time exception, then test actual blocking and restoration on your own device. The controller never changes an incompatible filter mode. It preserves unrelated rules, refuses known infrastructure targets and pauses on uncertain changes. Unselect is available when no owned or pending block remains.
 
-Fresh setup keeps blocking off. Select a device after checking its stable per-network Wi-Fi address, set every day's allowance and edit the example Study time exception. Exceptions allow all internet traffic and consume no allowance. The timezone is Europe/London.
+Allowances measure connected-and-allowed time, including idle periods, not screen time. The timezone is Europe/London, independent of the host timezone, using UK DST rules since 1996. Downtime is not back-filled. A rule can remain blocked when the controller is off; resolve that through the router if needed.
 
-Test on a device you control: apply a short allowance, confirm actual internet traffic is blocked at exhaustion, then switch blocking off and confirm it returns. Router read-back is not proof that traffic stopped. Set realistic allowances after testing.
+## Private data
 
-The service counts router-reported connected-and-allowed time, including idle periods. It is not screen-time measurement or app-specific blocking. Router outages, controller downtime and uncertain observations are not back-filled. Closing the laptop does not stop the service; the Pi must remain powered and connected.
+Windows: `%LOCALAPPDATA%\NetTime`; macOS: `~/Library/Application Support/NetTime`; Linux: `~/.local/share/nettime`. A legacy directory containing config is retained. Override with `NETTIME_DATA` or `--data-dir` before the subcommand; use one directory consistently. Run only one controller per router/target. A process lock protects the same local data directory.
 
-## Data and safety
+POSIX uses 700/600 modes; Windows uses current-user/SYSTEM ACLs. Credentials are password-equivalent and unencrypted at rest. Never upload the data directory. Read the repository's SECURITY.md for boundaries.
 
-- Data is in `~/.local/share/nettime`, outside the application directory. Directory mode is 700; files use 600. Router authentication is password-equivalent and stored locally without encryption at rest. Never upload that folder.
-- API requests require the dashboard access key. Other hosts/origins are refused. Do not expose port 8787 publicly.
-- Router communication uses a pinned TLS certificate. A changed certificate stops communication until setup is repeated after verification.
-- Only Deny mode is supported. NetTime preserves other entries, refuses infrastructure targets and never changes filter mode.
-- Another administrator's edit or an unclear write pauses automation. Writes are read back, not repeated blindly. The API has no atomic list edit, so concurrent changes can still race.
-- Turning blocking off stops automation and attempts to remove only the block it owns. An uncertain block needs review through the dashboard. Unselect is allowed only when no owned or pending block remains.
-- The original controller was manually tested for block and restore on one compatible router and client. The public distribution's automated tests use synthetic data; validate your own installation before relying on it.
-
-## Commands
-
-Run these from this package directory:
-
-```bash
-python3 -m nettime doctor
-python3 -m nettime new-key
-sudo systemctl restart nettime
-python3 -m unittest discover -s tests
-```
-
-`new-key` replaces the dashboard key; save it privately and restart the service afterwards. `doctor` is read-only. For foreground operation, use `python3 -m nettime serve` instead of installing the service.
-
-Before stopping or removing NetTime, turn blocking off and confirm access returns. Stopping the service does not itself remove a router entry. If the Pi is unreachable, remove only the intended device's entry using the router administration page.
-
-## Update a portable installation
-
-Verify the new package and release notes, then stop the service, extract the new package over this directory and restart. Data remains in the separate private data directory. Run `doctor` afterwards. Do not rerun setup unless the router connection or certificate needs changing.
+Before updating or moving devices, turn blocking off and confirm internet returns, then stop the old job. Replace this package and restart it, keeping the separate private data folder. Reinstall the background job if its Python executable or package path changes. Run `doctor` afterwards. Stopping/removing the job does not remove router rules.

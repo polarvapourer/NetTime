@@ -1,11 +1,10 @@
 """Pure schedule policy in Europe/London wall-clock time (same rules as the NetTime dashboard)."""
 import math
-import os
+import calendar
+from datetime import datetime, timedelta, timezone
 import re
-import time
 
 TIMEZONE = "Europe/London"
-POSIX_UK = "GMT0BST,M3.5.0/1,M10.5.0"
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 MAX_DAY_MINUTES = 1440
 _HHMM = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
@@ -14,21 +13,27 @@ EXC_KEYS = {"id", "label", "days", "start", "end"}
 
 
 def init_tz():
-    """Use the OS tz database via TZ + time.tzset (works on Python 3.7)."""
-    os.environ["TZ"] = TIMEZONE
-    time.tzset()
-    if not ({"GMT", "BST"} & set(time.tzname)):
-        # No tz database: the POSIX rule for current UK law (last Sun Mar 01:00 UTC -> last Sun Oct).
-        os.environ["TZ"] = POSIX_UK
-        time.tzset()
-    if set(time.tzname) != {"GMT", "BST"}:
-        raise RuntimeError("Europe/London timezone could not be configured")
+    """Compatibility entry point. Conversion no longer changes the process timezone."""
+    return TIMEZONE
 
 
 def london(ts):
-    t = time.localtime(ts)
-    return {"date": "%04d-%02d-%02d" % (t.tm_year, t.tm_mon, t.tm_mday),
-            "day": DAYS[t.tm_wday], "minute": t.tm_hour * 60 + t.tm_min}
+    """UK scheduling rules since 1996, independent of host TZ and tzset availability.
+
+    BST starts/ends at 01:00 UTC on the last Sunday of March/October.
+    This is a current-schedule converter, not a historical timezone database.
+    """
+    t = datetime.fromtimestamp(ts, timezone.utc)
+    if t.year < 1996:
+        raise ValueError("NetTime scheduling supports dates from 1996 onwards")
+    def boundary(month):
+        last = calendar.monthrange(t.year, month)[1]
+        d = datetime(t.year, month, last, 1, tzinfo=timezone.utc)
+        return d - timedelta(days=(d.weekday() + 1) % 7)
+    if boundary(3) <= t < boundary(10):
+        t += timedelta(hours=1)
+    return {"date": t.strftime("%Y-%m-%d"), "day": DAYS[t.weekday()],
+            "minute": t.hour * 60 + t.minute}
 
 
 def parse_hhmm(v):

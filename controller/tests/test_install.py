@@ -10,7 +10,7 @@ import unittest
 SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts", "build_pi_zip.py")
 
 
-@unittest.skipUnless(os.path.exists(SCRIPT) and shutil.which("sh"), "needs full project and sh")
+@unittest.skipUnless(os.name != "nt" and os.path.exists(SCRIPT) and shutil.which("sh"), "needs full project and sh")
 class Install(unittest.TestCase):
     def test_documented_invocation(self):
         d = tempfile.mkdtemp()
@@ -41,7 +41,7 @@ class Install(unittest.TestCase):
                 text = f.read()
             self.assertIn("User=pi", text)
             self.assertIn("-m nettime serve", text)
-            self.assertIn("WorkingDirectory=%s" % pkg, text)
+            self.assertIn("WorkingDirectory=" + '"%s"' % pkg, text)
             with open(log) as f:
                 calls = f.read()
             self.assertIn("enable nettime", calls)

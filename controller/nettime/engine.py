@@ -1,9 +1,9 @@
 """Scheduler, metering and enforcement. Runs without any browser open."""
-import os
 import threading
 import time
 
 from .macs import canonical_mac, is_unicast
+from .host import local_macs
 from .policy import active_exception, decide, london, setup_complete, split_charge, validate_settings
 from .router import PinMismatch, RouterError, apply_target
 
@@ -16,30 +16,6 @@ FAILED = ("refused", "write-failed", "unconfirmed", "readback-mismatch")
 
 class UserError(Exception):
     pass
-
-
-def local_macs():
-    """This Pi's own interface MACs and the gateway's MAC (never valid targets)."""
-    out = set()
-    try:
-        for n in os.listdir("/sys/class/net"):
-            try:
-                with open("/sys/class/net/%s/address" % n) as f:
-                    m = canonical_mac(f.read().strip())
-                if m and m != "00:00:00:00:00:00":
-                    out.add(m)
-            except OSError:
-                pass
-        with open("/proc/net/arp") as f:
-            for line in f.read().splitlines()[1:]:
-                parts = line.split()
-                if len(parts) >= 4 and parts[0] == "192.168.1.1":
-                    m = canonical_mac(parts[3])
-                    if m:
-                        out.add(m)
-    except OSError:
-        pass
-    return out
 
 
 class Engine(object):
@@ -156,7 +132,7 @@ class Engine(object):
             if self.active() and self.needs_revalidation:
                 problems = self.activation_problems(f, resuming=True)
                 if self.st["expectedBlocked"] is None or observed != self.st["expectedBlocked"]:
-                    problems.append("the iPad's router entry differs from what NetTime last confirmed")
+                    problems.append("the selected device's router entry differs from what NetTime last confirmed")
                 if problems:
                     self._pause("Paused after restart: " + "; ".join(problems))
                 self.needs_revalidation = False
@@ -166,7 +142,7 @@ class Engine(object):
                 if f["mode"] != "Deny":
                     self._pause("Router filter mode changed to %s outside NetTime" % f["mode"][:20])
                 elif observed != self.st["expectedBlocked"]:
-                    self._pause("The iPad was %s in the router outside NetTime"
+                    self._pause("The device was %s in the router outside NetTime"
                                 % ("unblocked" if self.st["expectedBlocked"] else "blocked"))
                     if not observed:
                         self.st["ownedBlock"] = False
@@ -217,16 +193,18 @@ class Engine(object):
     # ---------- owner actions
     def activation_problems(self, f=None, resuming=False):
         p = []
+        if not self.self_macs and not self.local_device_id:
+            p.append("Controller identity unavailable; cannot safely enable blocking")
         if self.router is None:
             p.append("Router login not set up")
         if not setup_complete(self.st["settings"]):
             p.append("Choose an allowance for every day")
         t = self.st["target"]
         if not t:
-            p.append("Select the iPad from the device list")
+            p.append("Select the device from the device list")
         else:
             if self.devices is None or not any(t in d["macs"] for d in self.devices):
-                p.append("Selected iPad address not in the router's current device list (find devices again)")
+                p.append("Selected device address not in the router's current device list (find devices again)")
             r = self._forbidden_reason(t)
             if r:
                 p.append(r)
@@ -237,7 +215,7 @@ class Engine(object):
             if f["mode"] != "Deny":
                 p.append("Router MAC filter mode must be Deny")
             if not resuming and t and t in f["macs"] and not self.st["ownedBlock"]:
-                p.append("The iPad is already in the router's deny list (added manually). Remove it in the router first.")
+                p.append("The device is already in the router's deny list (added manually). Remove it in the router first.")
         return p
 
     def set_enforcement(self, enabled):
@@ -307,11 +285,11 @@ class Engine(object):
             if self.st["target"] not in f["macs"]:
                 self.st["pending"] = None
                 self._save()
-                return "Router checked: the iPad is not in the deny list. Uncertain marker cleared."
+                return "Router checked: the device is not in the deny list. Uncertain marker cleared."
             if not confirm_uncertain or pend.get("status") != "present-unverified":
                 self.st["pending"] = dict(pend, status="present-unverified", at=self.clock())
                 self._save()
-                return ("The iPad is in the deny list. NetTime tried to add it but never confirmed, so it may be "
+                return ("The device is in the deny list. NetTime tried to add it but never confirmed, so it may be "
                         "NetTime's block or a manual one. Use 'Remove uncertain block' to remove it, or leave it.")
             self.st["ownedBlock"] = True  # owner confirmed this entry is NetTime's
             self._save()
@@ -332,7 +310,7 @@ class Engine(object):
             pend = self.st["pending"] or {}
             owned = observed and (self.st["ownedBlock"] or pend.get("want") is True)
             if observed and not owned:
-                raise UserError("The iPad is in the deny list but NetTime did not add it. Remove it in the router or switch blocking off.")
+                raise UserError("The device is in the deny list but NetTime did not add it. Remove it in the router or switch blocking off.")
             self.st.update(paused=None, pending=None, expectedBlocked=observed, ownedBlock=owned)
             self.needs_revalidation = False
             self.last_sample = None

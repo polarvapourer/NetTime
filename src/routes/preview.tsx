@@ -75,7 +75,7 @@ function PreviewPage() {
       </section>
 
       <Notice>
-        <strong className="text-foreground">How minutes would be counted.</strong> The separate Pi controller counts minutes the {settings.deviceLabel} is connected with internet enabled, outside exception windows. That is <em>not</em> screen time — an idle connected device can still use minutes. The count resets at UK midnight. Nothing is being counted now.
+        <strong className="text-foreground">How minutes would be counted.</strong> The separate controller counts minutes the {settings.deviceLabel} is connected with internet enabled, outside exception windows. That is <em>not</em> screen time — an idle connected device can still use minutes. The count resets at UK midnight. Nothing is being counted now.
       </Notice>
     </div>
   );

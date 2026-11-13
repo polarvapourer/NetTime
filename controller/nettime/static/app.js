@@ -16,10 +16,10 @@
   function api(method, path, body) {
     return fetch(path, {method: method, headers: Object.assign({"Authorization": "Bearer " + sessionStorage.getItem(KEY)},
       body ? {"Content-Type": "application/json"} : {}), body: body ? JSON.stringify(body) : undefined})
-      .then(function (r) { return r.json().catch(function () { var e = new Error("Pi not reachable"); e.lost = true; throw e; }).then(function (j) {
+      .then(function (r) { return r.json().catch(function () { var e = new Error("Controller not reachable"); e.lost = true; throw e; }).then(function (j) {
         if (r.status === 401) { sessionStorage.removeItem(KEY); showLogin("Access key not accepted."); }
         if (!r.ok) { var e = new Error(j.error || "Request failed"); e.auth = r.status === 401; throw e; } return j; }); },
-        function () { var e = new Error("Pi not reachable"); e.lost = true; throw e; });
+        function () { var e = new Error("Controller not reachable"); e.lost = true; throw e; });
   }
   function say(t, bad) { var m = $("msg"); m.hidden = false; m.textContent = t; m.className = "notice" + (bad ? " warn" : ""); }
   function fmt(sec) { var m = Math.floor(sec / 60); return (m >= 60 ? Math.floor(m / 60) + "h " : "") + (m % 60) + "m"; }
@@ -30,7 +30,7 @@
     if (on) {
       MUTATORS.forEach(function (id) { $(id).disabled = true; });
       Array.prototype.forEach.call(document.querySelectorAll("#devices button"), function (b) { b.disabled = true; });
-      $("mode-pill").textContent = "Pi connection unknown"; $("mode-pill").className = "pill bad";
+      $("mode-pill").textContent = "Controller connection unknown"; $("mode-pill").className = "pill bad";
     } else {
       MUTATORS.forEach(function (id) { $(id).disabled = false; });
       if (state) renderSelection(state);
@@ -42,7 +42,7 @@
 
   var STATUS_TEXT = {
     router: {ok: "Connected", error: "Error", "tls-pin": "Certificate changed — re-run setup", unknown: "Checking…", "not-configured": "Not set up"},
-    connection: {connected: "Router reports this address connected", "not-connected": "This address not connected (or the iPad's Wi-Fi address changed)", "not-listed": "Not in router's list", unknown: "Unknown"},
+    connection: {connected: "Router reports this address connected", "not-connected": "This address not connected (or the selected device's Wi-Fi address changed)", "not-listed": "Not in router's list", unknown: "Unknown"},
     metering: {off: "Not counting (observation only)", counting: "Counting", exception: "Exception — time not counted", blocked: "Not counting (blocked)", "not-connected": "Not counting (not connected)", unknown: "Unknown — router not answering"}
   };
 
@@ -73,7 +73,7 @@
     rb.textContent = s.ownedBlock ? "Retry removing block" : rb.dataset.confirm ? "Remove uncertain block" : "Check uncertain block";
     $("resume-btn").hidden = !s.paused;
     $("enf-text").textContent = s.enforcement
-      ? "Blocking is on. NetTime adds/removes only the selected iPad in the router's deny list."
+      ? "Blocking is on. NetTime adds/removes only the selected device in the router's deny list."
       : "Observation only. NetTime reads the router and changes nothing until you switch blocking on.";
     var ul = $("problems"); ul.textContent = "";
     (s.activationProblems || []).forEach(function (p) { ul.appendChild(el("li", p)); });
@@ -154,12 +154,12 @@
   $("resume-btn").addEventListener("click", function () { act(api("POST", "/api/resume", {})); });
   $("release-btn").addEventListener("click", function () {
     var c = $("release-btn").dataset.confirm === "1";
-    if (c && !confirm("Remove the iPad from the router's deny list? NetTime could not confirm whether it added this entry; only continue if no one blocked it manually.")) return;
+    if (c && !confirm("Remove the device from the router's deny list? NetTime could not confirm whether it added this entry; only continue if no one blocked it manually.")) return;
     act(api("POST", "/api/release", c ? {confirmUncertain: true} : {}));
   });
   $("enf-btn").addEventListener("click", function () {
     var on = !state.enforcement;
-    if (on && !confirm("Switch blocking on? NetTime will add/remove the selected iPad in the router's deny list on schedule.")) return;
+    if (on && !confirm("Switch blocking on? NetTime will add/remove the selected device in the router's deny list on schedule.")) return;
     act(api("POST", "/api/enforcement", {enabled: on}));
   });
   $("discover").addEventListener("click", function () {

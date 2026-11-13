@@ -104,7 +104,7 @@ async def main():
         st["down"] = True
         await page.evaluate("1"); await page.click("#bonus-clear"); await page.wait_for_timeout(400)
         check(not await page.locator("#lost").is_hidden(), "connection lost notice shown")
-        check(await txt("#mode-pill") == "Pi connection unknown", "pill shows connection unknown")
+        check(await txt("#mode-pill") == "Controller connection unknown", "pill shows connection unknown")
         check(await page.locator("#save").is_disabled() and await page.locator("#enf-btn").is_disabled(), "controls disabled")
         check(await page.locator("#unselect-btn").is_disabled() and await page.locator("#devices .dev button").first.is_disabled(), "unselect and rows disabled when Pi lost")
         await page.screenshot(path="/tmp/browser/pi/lost.png")

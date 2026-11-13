@@ -31,8 +31,8 @@ The state records ownership and pending changes. A lost response does not justif
 
 | Boundary | Control | Remaining limitation |
 | --- | --- | --- |
-| Browser to Pi | SSH tunnel, loopback listener, API access key, Host/Origin checks | The owner must protect the Pi account and access key |
-| Pi to router | Pinned HTTPS certificate | Initial pin verification is the owner's trust decision |
+| Browser to controller | SSH tunnel, loopback listener, API access key, Host/Origin checks | The owner must protect the controller account and access key |
+| Controller to router | Pinned HTTPS certificate | Initial pin verification is the owner's trust decision |
 | Local persistence | Restricted permissions and atomic file replacement | Router authentication remains readable by that OS account |
 | Router to client | One selected MAC-filter entry | MAC changes and other networks can bypass it |
 
@@ -41,3 +41,13 @@ The state records ownership and pending changes. A lost response does not justif
 TypeScript tests cover policy evaluation, validation, browser persistence and bonus-date scoping. Python tests use fake routers and clocks to exercise error paths that are difficult to reproduce safely on real equipment. The package tests verify reproducibility, credential exclusions and installation through a mocked service manager.
 
 The public distribution deliberately omits private deployment records, provider project metadata, historical binary packages and an unrelated radio experiment. Only sanitised source and a newly built controller package are published.
+
+## Portable host layer
+
+The management computer and controller can be the same device or separate devices. Python source runs with native Python on Windows, Linux, Apple Silicon macOS and Intel macOS. Foreground operation is portable; native startup uses a Linux systemd service, a macOS user LaunchAgent or a Windows current-user scheduled task. The latter two depend on an active signed-in user session. The host must remain awake.
+
+London conversion is independent of the host timezone and uses the UK DST rule in force since 1996. It requires no system tz database or Unix-only tzset. This is not a historical timezone database; UK law changes require a code update. Windows private data uses native DACLs, while POSIX uses file modes. A process lock prevents two processes using one local data directory. It does not coordinate controllers on different machines.
+
+## Router adapters
+
+Saved configuration chooses the built-in Linksys JNAP client or a trusted command driver. Both supply the engine's filter/device/identity operations. Older configuration defaults to Linksys without migration. The command driver takes JSON over stdin and returns validated JSON, with timeouts and no shell or credential command-line arguments. The same read/modify/read-back transaction applies to both adapters. Adapter authors must preserve any native configuration that is not represented by the shared deny-list contract. No universal-router compatibility is implied.

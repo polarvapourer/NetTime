@@ -16,7 +16,7 @@
     <p id="login-err" class="err"></p>
   </section>
   <div id="app" hidden>
-    <p id="lost" class="notice warn" hidden>Pi connection lost — displayed state is stale. The Pi keeps running its schedule on its own; this page reconnects automatically. Changes are disabled until then.</p>
+    <p id="lost" class="notice warn" hidden>Controller connection lost — displayed state is stale. The controller keeps running its schedule on its own; this page reconnects automatically. Changes are disabled until then.</p>
     <p id="msg" class="notice" hidden></p>
     <section class="panel">
       <h2>Status</h2>
@@ -31,7 +31,7 @@
     </section>
     <section class="panel">
       <h2>Device</h2>
-      <p class="muted">Pick the iPad by its Wi-Fi address (Settings › Wi-Fi › ⓘ on the iPad). Use a fixed address for your home network, not rotating.</p>
+      <p class="muted">Pick the device by the network address shown in its own Wi-Fi/Ethernet settings. Use a fixed address for your home network, not rotating.</p>
       <div class="row"><span id="sel-summary">No device selected</span> <button id="unselect-btn" class="ghost" hidden>Unselect device</button></div>
       <p id="unselect-why" class="muted" hidden></p>
       <button id="discover" class="outline">Find devices</button>
@@ -39,7 +39,7 @@
     </section>
     <section class="panel">
       <h2>Schedule</h2>
-      <p class="muted">Time counted = minutes the router shows the iPad connected and allowed, including idle time (e.g. overnight). It is not screen time.</p>
+      <p class="muted">Time counted = minutes the router shows the device connected and allowed, including idle time (e.g. overnight). It is not screen time.</p>
       <div class="row"><label>Weekdays <input id="bulk-wd" type="number" min="0" max="1440" placeholder="min"></label><button id="bulk-wd-btn" class="outline">Fill Mon–Fri</button>
       <label>Weekend <input id="bulk-we" type="number" min="0" max="1440" placeholder="min"></label><button id="bulk-we-btn" class="outline">Fill Sat–Sun</button></div>
       <div id="days" class="days"></div>

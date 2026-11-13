@@ -4,20 +4,24 @@ import getpass
 import os
 import secrets
 import signal
+import subprocess
 import sys
 import threading
 
 from . import VERSION
+from .adapters import from_config
 from .engine import POLL_SECONDS, Engine
+from .host import ControllerLock, local_macs
+from .service import manage
 from .policy import init_tz, london
 from .router import (HttpsTransport, Router, RouterError, basic_auth_header, check_pasted_header,
                      fetch_cert_fingerprint, pretty_fp, validate_router_host)
 from .server import make_server, token_hash
-from .store import DEFAULT_DIR, Store, private_ok
+from .store import DEFAULT_DIR, Store, private_ok, read_json
 
 
 def _router(cfg):
-    return Router(HttpsTransport(cfg["host"], cfg["pin"], cfg["auth"])) if cfg else None
+    return from_config(cfg)
 
 
 def _new_key(store, cfg):
@@ -25,13 +29,18 @@ def _new_key(store, cfg):
     cfg["tokenHash"] = token_hash(tok)
     store.save_config(cfg)
     print("\nYour NetTime access key (shown once - keep it private, like a password):\n\n  %s\n" % tok)
-    print("Or open this link after starting the SSH tunnel (the key stays in your browser only):")
+    print("Or open this link locally, or after starting an SSH tunnel (the key stays in your browser only):")
     print("  http://127.0.0.1:8787/#key=%s\n" % tok)
 
 
 def cmd_setup(a, store):
     init_tz()
     store.init()
+    previous = store.load_state()
+    if previous["enforcement"] or previous["ownedBlock"] or previous["pending"]:
+        raise ValueError("Turn blocking off and resolve any router block before changing setup")
+    if a.adapter == 'command':
+        return _setup_driver(a, store)
     host = validate_router_host(a.router)
     print("NetTime setup (read-only). Blocking stays OFF until you switch it on in the page.\n")
     fp = fetch_cert_fingerprint(host)
@@ -50,7 +59,7 @@ def cmd_setup(a, store):
         return 1
     print("Read test OK: MAC filter mode %s, %d entr%s in the list." % (f["mode"], len(f["macs"]), "y" if len(f["macs"]) == 1 else "ies"))
     old = store.load_config() or {}
-    cfg = {"host": host, "pin": fp, "auth": auth, "tokenHash": old.get("tokenHash")}
+    cfg = {"adapter": "linksys-jnap", "host": host, "pin": fp, "auth": auth, "tokenHash": old.get("tokenHash")}
     store.save_config(cfg)
     if not st_exists(store):
         store.save_state(store.load_state())
@@ -58,7 +67,37 @@ def cmd_setup(a, store):
         _new_key(store, cfg)
     else:
         print("Kept your existing access key (use 'python3 -m nettime new-key' if lost).")
-    print("Next: sh ./install-service.sh")
+    print("Next: python -m nettime serve (or python -m nettime service install).")
+    print("Use the same Python command you used for setup: py -3 on Windows, python3 on macOS/Linux.")
+    return 0
+
+
+def _setup_driver(a, store):
+    if not a.driver or not a.driver_config:
+        raise ValueError('Command adapter requires --driver and --driver-config. Read docs/ROUTERS.md.')
+    driver = os.path.abspath(os.path.expanduser(a.driver))
+    config_path = os.path.abspath(os.path.expanduser(a.driver_config))
+    if not private_ok(config_path, 0o600):
+        raise ValueError('Driver configuration must be private to your account; see ROUTERS.md')
+    config = read_json(config_path)
+    if not isinstance(config, dict):
+        raise ValueError('Driver config must be a JSON object')
+    print('This runs your trusted local router driver. Setup performs reads only.')
+    cfg = {'adapter': 'command', 'driver': driver, 'driverConfig': config,
+           'tokenHash': (store.load_config() or {}).get('tokenHash')}
+    router = _router(cfg)
+    f = router.get_filter()
+    if f['mode'] != 'Deny':
+        raise ValueError('Driver/router must expose a supported Deny policy; nothing saved')
+    router.get_devices()
+    router.get_local_device_id()
+    store.save_config(cfg)
+    if not st_exists(store):
+        store.save_state(store.load_state())
+    if not cfg['tokenHash'] or a.new_key:
+        _new_key(store, cfg)
+    print('Read tests passed. This does not prove traffic enforcement. Test block AND restore before relying on it.')
+    print('Next: serve, then optionally service install, using this Python command.')
     return 0
 
 
@@ -72,7 +111,7 @@ def cmd_new_key(a, store):
         print("Run setup first.")
         return 1
     _new_key(store, cfg)
-    print("Restart the service to use it: sudo systemctl restart nettime")
+    print("Restart the controller to use it: python -m nettime service restart, or restart foreground serve.")
     return 0
 
 
@@ -82,8 +121,11 @@ def cmd_doctor(a, store):
     print("NetTime %s, Python %d.%d.%d" % (VERSION, v[0], v[1], v[2]))
     if v < (3, 7):
         print("  FAIL Python 3.7 or newer is required"); ok = False
-    elif v < (3, 9):
-        print("  NOTE This Python/OS is end-of-life. Fine for testing; a supported Raspberry Pi OS Lite on a separate microSD is recommended long-term.")
+    elif v < (3, 10):
+        print("  NOTE Legacy Python compatibility; use a currently supported Python and OS for a new installation.")
+    print("  INFO Data directory: %s" % store.dir)
+    macs = local_macs()
+    print("  %s Host interface identity%s" % ("OK  " if macs else "WARN", " detected" if macs else " unavailable; router identity is required before enabling"))
     try:
         init_tz()
         print("  OK   London time now: %s" % london(__import__("time").time()))
@@ -93,7 +135,10 @@ def cmd_doctor(a, store):
     if not cfg:
         print("  --   Not set up yet (run: python3 -m nettime setup)")
         return 0 if ok else 1
-    for p, want in ((store.dir, 0o700), (store.config_path, 0o600)):
+    paths = [(store.dir, 0o700), (store.config_path, 0o600)]
+    if os.path.exists(store.state_path):
+        paths.append((store.state_path, 0o600))
+    for p, want in paths:
         good = private_ok(p, want)
         ok = ok and good
         print("  %s permissions %s" % ("OK  " if good else "FAIL", p))
@@ -117,6 +162,12 @@ def cmd_doctor(a, store):
 
 
 def cmd_serve(a, store):
+    store.init()
+    with ControllerLock(store.dir):
+        return _serve(a, store)
+
+
+def _serve(a, store):
     init_tz()
     cfg = store.load_config()
     if not cfg or not cfg.get("tokenHash"):
@@ -137,7 +188,8 @@ def cmd_serve(a, store):
             delay = POLL_SECONDS if good else min(max(delay * 2, POLL_SECONDS), 120)
             stop.wait(delay)
 
-    threading.Thread(target=loop, daemon=True).start()
+    worker = threading.Thread(target=loop, daemon=True)
+    worker.start()
 
     def on_term(*_):
         stop.set()
@@ -148,8 +200,17 @@ def cmd_serve(a, store):
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
-    stop.set()
+    finally:
+        stop.set()
+        srv.server_close()
+        worker.join()
     return 0
+
+
+def cmd_service(a, store):
+    if a.action in ("stop", "remove"):
+        print("Turn blocking OFF and confirm access has returned first. Stopping does not remove router rules.")
+    return manage(a.action, store)
 
 
 def main(argv=None):
@@ -158,15 +219,20 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd")
     s = sub.add_parser("setup", help="pin router certificate, check login (read-only), create access key")
     s.add_argument("--router", default="192.168.1.1")
+    s.add_argument('--adapter', choices=('linksys-jnap', 'command'), default='linksys-jnap')
+    s.add_argument('--driver', help='absolute path to a trusted local driver (.py or executable)')
+    s.add_argument('--driver-config', help='path to a private JSON object for that driver')
     s.add_argument("--paste-header", action="store_true", help="enter a copied login header (hidden) instead of the password")
     s.add_argument("--new-key", action="store_true")
     sub.add_parser("doctor", help="read-only checks")
     sv = sub.add_parser("serve", help="run scheduler and local page")
     sv.add_argument("--port", type=int, default=8787)
     sub.add_parser("new-key", help="replace the access key")
+    service = sub.add_parser("service", help="manage native background startup")
+    service.add_argument("action", choices=("install", "start", "stop", "restart", "status", "remove"))
     a = p.parse_args(argv)
-    store = Store(a.data_dir)
-    fn = {"setup": cmd_setup, "doctor": cmd_doctor, "serve": cmd_serve, "new-key": cmd_new_key}.get(a.cmd)
+    store = Store(os.path.abspath(os.path.expanduser(a.data_dir)))
+    fn = {"setup": cmd_setup, "doctor": cmd_doctor, "serve": cmd_serve, "new-key": cmd_new_key, "service": cmd_service}.get(a.cmd)
     if not fn:
         p.print_help()
         return 2
@@ -175,6 +241,6 @@ def main(argv=None):
     except RouterError as e:
         print("Router: %s" % e)
         return 1
-    except (ValueError, OSError) as e:
+    except (ValueError, OSError, subprocess.CalledProcessError) as e:
         print("Error: %s" % e)
         return 1

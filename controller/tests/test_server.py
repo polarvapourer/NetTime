@@ -11,7 +11,7 @@ import unittest
 from nettime.engine import Engine
 from nettime.policy import init_tz
 from nettime.server import make_server, token_hash
-from nettime.store import Store
+from nettime.store import Store, private_ok
 from fakes import IPAD, PI, Clock, make_router, utc
 
 init_tz()
@@ -102,8 +102,8 @@ class Server(unittest.TestCase):
 
     def test_files_private(self):
         self.req("POST", "/api/bonus", {"minutes": 1})
-        self.assertEqual(stat.S_IMODE(os.stat(self.dir).st_mode), 0o700)
-        self.assertEqual(stat.S_IMODE(os.stat(self.store.state_path).st_mode), 0o600)
+        self.assertTrue(private_ok(self.dir, 0o700))
+        self.assertTrue(private_ok(self.store.state_path, 0o600))
 
 
 class UnselectApi(Server):

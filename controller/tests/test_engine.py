@@ -384,7 +384,7 @@ class Unselect(Base):
         self.assertIsNone(snap["status"]["targetInList"])
         self.assertIsNone(snap["status"]["ruleMessage"])
         self.assertIsNone(self.e.last_sample)
-        self.assertIn("Select the iPad from the device list", snap["activationProblems"])
+        self.assertIn("Select the device from the device list", snap["activationProblems"])
         for k in ("settings", "usage", "bonus", "enforcement", "ownedBlock", "pending"):
             self.assertEqual(self.e.st[k], self.st_before[k], k)
         r = self.new_engine()  # restart

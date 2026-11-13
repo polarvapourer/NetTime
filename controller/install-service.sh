@@ -5,7 +5,7 @@
 set -eu
 if [ "$(id -u)" = "0" ]; then echo "Run as your normal user (e.g. pi), not root."; exit 1; fi
 DIR="$(cd "$(dirname "$0")" && pwd)"
-PY="$(command -v python3)"
+PY="${NETTIME_PYTHON:-$(command -v python3)}"
 USER_NAME="$(id -un)"
 DATA="${NETTIME_DATA:-$HOME/.local/share/nettime}"
 "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3,7) else 1)' || { echo "Python 3.7+ needed"; exit 1; }
@@ -13,19 +13,26 @@ DATA="${NETTIME_DATA:-$HOME/.local/share/nettime}"
 mkdir -p "$DATA"; chmod 700 "$DATA"; chmod 600 "$DATA"/*.json
 UNIT="${NETTIME_UNIT_PATH:-/etc/systemd/system/nettime.service}"  # override only for tests
 TMP="$(mktemp)"
-cat > "$TMP" <<UNITEOF
-[Unit]
+"$PY" - "$DIR" "$PY" "$USER_NAME" "$DATA" > "$TMP" <<'UNITPY'
+import sys
+
+def quoted(value):
+    if any(c in value for c in "\n\r\0"):
+        raise ValueError("Service paths must not contain control characters")
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%') + '"'
+
+package, python, user, data = sys.argv[1:]
+print("""[Unit]
 Description=NetTime home controller (loopback only)
 After=network-online.target time-sync.target
 Wants=network-online.target
 
 [Service]
-User=$USER_NAME
-WorkingDirectory=$DIR
-Environment=TZ=Europe/London
-Environment=NETTIME_DATA=$DATA
+User=%s
+WorkingDirectory=%s
+Environment=%s
 Environment=PYTHONUNBUFFERED=1
-ExecStart=$PY -m nettime serve
+ExecStart=%s -m nettime serve
 Restart=always
 RestartSec=10
 NoNewPrivileges=true
@@ -34,7 +41,8 @@ UMask=0077
 
 [Install]
 WantedBy=multi-user.target
-UNITEOF
+""" % (user, quoted(package), quoted("NETTIME_DATA=" + data), quoted(python)))
+UNITPY
 if [ -e "$UNIT" ] && ! cmp -s "$TMP" "$UNIT"; then
   if ! grep -q "NetTime home controller" "$UNIT"; then
     echo "$UNIT exists and is not NetTime's. Not overwriting."; rm -f "$TMP"; exit 1
@@ -50,6 +58,6 @@ sleep 2
 systemctl --no-pager --lines=3 status nettime || true
 echo
 echo "Installed. A fresh install stays OFF (observation only). If you had already switched blocking on,"
-echo "it resumes only after the Pi re-checks the router and the iPad; otherwise it pauses."
+echo "it resumes only after the controller re-checks the router and selected device; otherwise it pauses."
 echo "On your laptop:  ssh -N -L 8787:127.0.0.1:8787 $USER_NAME@$(hostname).local"
 echo "Then open        http://127.0.0.1:8787"

@@ -36,7 +36,7 @@ class Archive(unittest.TestCase):
         with open(os.path.join(root, "controller", "nettime", "__init__.py")) as f:
             v = [l.split('"')[1] for l in f if l.startswith("VERSION")][0]
         dl = os.path.join(root, "public", "downloads")
-        with open(os.path.join(dl, "nettime-pi.zip"), "rb") as a, open(os.path.join(dl, "nettime-pi-%s.zip" % v), "rb") as b:
+        with open(os.path.join(dl, "nettime-controller.zip"), "rb") as a, open(os.path.join(dl, "nettime-controller-%s.zip" % v), "rb") as b:
             self.assertEqual(a.read(), b.read())
 
 
