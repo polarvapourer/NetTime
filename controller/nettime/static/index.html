@@ -43,9 +43,18 @@
       <div class="row"><label>Weekdays <input id="bulk-wd" type="number" min="0" max="1440" placeholder="min"></label><button id="bulk-wd-btn" class="outline">Fill Mon–Fri</button>
       <label>Weekend <input id="bulk-we" type="number" min="0" max="1440" placeholder="min"></label><button id="bulk-we-btn" class="outline">Fill Sat–Sun</button></div>
       <div id="days" class="days"></div>
+      <h3>School hours (Monday–Friday)</h3>
+      <p class="muted">Allow access and stop the allowance counting during school hours, even if the daily allowance is exhausted or leisure access is paused. Normal rules resume afterwards. Times use Europe/London.</p>
+      <label class="check"><input id="school-enabled" type="checkbox"> Enable school hours</label>
+      <div class="row"><label>School start <input id="school-start" type="time"></label><label>School end <input id="school-end" type="time"></label></div>
+      <h3>Away from home</h3>
+      <p class="muted">Stop the allowance counting during these recurring periods. Access still follows the normal allowance and pause rules. For overnight periods, the selected day is the day you leave. All times use Europe/London.</p>
+      <div id="away-windows"></div>
+      <button id="away-add" class="outline" type="button">Add away period</button>
+      <p class="muted">These schedules do not detect the screen locking or whether someone has actually left home. Idle time outside these periods can still count.</p>
       <h3>Exception windows</h3>
       <div id="exceptions"></div>
-      <label class="check"><input id="paused-box" type="checkbox"> Pause leisure access (exception windows still allowed)</label>
+      <label class="check"><input id="paused-box" type="checkbox"> Pause leisure access (school hours and exception windows still allowed)</label>
       <button id="save">Save schedule</button>
     </section>
     <section class="panel">

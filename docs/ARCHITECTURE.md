@@ -9,15 +9,15 @@ The Python service has its own HTML/JavaScript dashboard. A polling worker reads
 ## Policy order
 
 1. Incomplete or invalid settings prevent enforcement.
-2. A matching exception permits access without charging time.
-3. A leisure pause blocks outside exceptions.
+2. School hours and ordinary exceptions allow access without charging allowance.
+3. A leisure pause blocks outside school hours and exceptions.
 4. The current day's allowance and bonus determine remaining access.
 
-Exceptions are same-day intervals with an inclusive start and exclusive end. Cross-midnight windows are rejected. The timezone is currently Europe/London; it is not a configurable global-timezone system.
+Away periods independently pause metering while normal access rules apply. School hours and exceptions are same-day intervals; away periods may cross midnight and use the departure day. All periods include their start and exclude their end. The timezone is Europe/London with automatic BST/GMT handling.
 
 ## Accounting
 
-The engine charges only intervals for which the selected Wi-Fi address is reported connected and internet is allowed. Intervals are split at exception and London-day boundaries. A stale or malformed router response is unknown, not an offline device. Downtime and clock jumps are not filled with estimated usage.
+The engine charges only intervals for which the selected Wi-Fi address is reported connected and internet is allowed. Intervals are split at school, exception, away-period and London-day boundaries. A stale or malformed router response is unknown, not an offline device. Downtime and clock jumps are not filled with estimated usage.
 
 This measures internet-enabled connection time, including idle background activity, rather than screen interaction. It cannot identify YouTube, games or any other individual application.
 

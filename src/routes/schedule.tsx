@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Btn, Notice, PageHeader, Pill } from "@/components/nettime/ui";
 import { useNetTime } from "@/lib/nettime/use-nettime";
-import { DAYS, DAY_LABELS, formatMinutes, validateException, type Day, type ExceptionWindow } from "@/lib/nettime/policy";
+import { DAYS, DAY_LABELS, defaultSchoolHours, formatMinutes, validateAway, validateException, type AwayWindow, type Day, type ExceptionWindow, type SchoolHours } from "@/lib/nettime/policy";
 
 export const Route = createFileRoute("/schedule")({
   head: () => ({ meta: [
@@ -29,6 +29,8 @@ function SchedulePage() {
   const { settings, save, ready, hasSaved } = useNetTime();
   const [rows, setRows] = useState<Record<Day, Row>>(() => Object.fromEntries(DAYS.map((d) => [d, toRow(null)])) as Record<Day, Row>);
   const [exceptions, setExceptions] = useState<ExceptionWindow[]>([]);
+  const [schoolHours, setSchoolHours] = useState<SchoolHours>(defaultSchoolHours);
+  const [awayWindows, setAwayWindows] = useState<AwayWindow[]>([]);
   const [bulk, setBulk] = useState({ wd: { h: "", m: "" }, we: { h: "", m: "" } });
   const [status, setStatus] = useState<"idle" | "saved" | "dirty">("idle");
   const [formError, setFormError] = useState<string | null>(null);
@@ -37,6 +39,8 @@ function SchedulePage() {
     if (!ready) return;
     setRows(Object.fromEntries(DAYS.map((d) => [d, toRow(settings.weekly[d])])) as Record<Day, Row>);
     setExceptions(settings.exceptions);
+    setSchoolHours(settings.schoolHours);
+    setAwayWindows(settings.awayWindows);
   }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirty = () => { setStatus("dirty"); setFormError(null); };
@@ -50,12 +54,17 @@ function SchedulePage() {
 
   const parsed = DAYS.map((d) => [d, rowMinutes(rows[d])] as const);
   const exErrors = exceptions.map(validateException);
+  const schoolError = validateException({ days: ["mon"], ...schoolHours });
+  const awayErrors = awayWindows.map(validateAway);
+  const updateAway = (i: number, patch: Partial<AwayWindow>) => {
+    setAwayWindows((windows) => windows.map((w, j) => j === i ? { ...w, ...patch } : w)); dirty();
+  };
 
   const onSave = () => {
     const missing = parsed.filter(([, r]) => r.value === null && !r.error).map(([d]) => DAY_LABELS[d]);
-    if (parsed.some(([, r]) => r.error) || exErrors.some(Boolean)) return setFormError("Fix the highlighted fields first.");
+    if (parsed.some(([, r]) => r.error) || exErrors.some(Boolean) || schoolError || awayErrors.some(Boolean) || awayWindows.some((w) => !w.label.trim())) return setFormError("Fix the highlighted fields first.");
     if (missing.length) return setFormError(`Choose an allowance for: ${missing.join(", ")}. Enter 0 for no leisure time.`);
-    save({ ...settings, weekly: Object.fromEntries(parsed.map(([d, r]) => [d, r.value])) as Record<Day, number>, exceptions });
+    save({ ...settings, weekly: Object.fromEntries(parsed.map(([d, r]) => [d, r.value])) as Record<Day, number>, exceptions, schoolHours, awayWindows: awayWindows.map((w) => ({ ...w, label: w.label.trim() })) });
     setStatus("saved");
   };
 
@@ -82,6 +91,42 @@ function SchedulePage() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="panel space-y-4" aria-labelledby="school-heading">
+        <h2 id="school-heading" className="font-semibold">School hours (Monday–Friday)</h2>
+        <p className="text-sm text-muted-foreground">Allow access without using the daily allowance during these hours, even if the allowance is exhausted or leisure access is paused. Normal rules resume at the end. Times use Europe/London.</p>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={schoolHours.enabled} onChange={(e) => { setSchoolHours({ ...schoolHours, enabled: e.target.checked }); dirty(); }} />Enable school hours</label>
+        <div className="flex flex-wrap gap-3 text-sm">
+          <label>School start <input type="time" className="field" value={schoolHours.start} onChange={(e) => { setSchoolHours({ ...schoolHours, start: e.target.value }); dirty(); }} /></label>
+          <label>School end <input type="time" className="field" value={schoolHours.end} onChange={(e) => { setSchoolHours({ ...schoolHours, end: e.target.value }); dirty(); }} /></label>
+        </div>
+        {schoolError && <p className="text-sm text-destructive">{schoolError}</p>}
+      </section>
+
+      <section className="panel space-y-4" aria-labelledby="away-heading">
+        <h2 id="away-heading" className="font-semibold">Away from home</h2>
+        <p className="text-sm text-muted-foreground">Pause the allowance counting during recurring away periods. Normal access rules still apply. For an overnight period, select the day you leave. Times use Europe/London.</p>
+        {awayWindows.map((w, i) => (
+          <fieldset key={w.id} className="space-y-3 rounded-lg border border-border p-4">
+            <legend>Away period {i + 1}</legend>
+            <label className="block text-sm">Name <input className="field" value={w.label} maxLength={40} onChange={(e) => updateAway(i, { label: e.target.value })} /></label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={w.enabled} onChange={(e) => updateAway(i, { enabled: e.target.checked })} />Enabled</label>
+            <div className="flex flex-wrap gap-2">
+              {DAYS.map((d) => <Btn key={d} variant={w.days.includes(d) ? "primary" : "outline"} aria-pressed={w.days.includes(d)} onClick={() => updateAway(i, { days: w.days.includes(d) ? w.days.filter((x) => x !== d) : DAYS.filter((x) => x === d || w.days.includes(x)) })}>{DAY_LABELS[d].slice(0, 3)}</Btn>)}
+            </div>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <label>Leave <input type="time" className="field" value={w.start} onChange={(e) => updateAway(i, { start: e.target.value })} /></label>
+              <label>Return <input type="time" className="field" value={w.end} onChange={(e) => updateAway(i, { end: e.target.value })} /></label>
+            </div>
+            {(awayErrors[i] || !w.label.trim()) && <p className="text-sm text-destructive">{awayErrors[i] || "Enter a name."}</p>}
+            <Btn variant="ghost" onClick={() => { setAwayWindows((windows) => windows.filter((_, j) => j !== i)); dirty(); }}>Remove away period</Btn>
+          </fieldset>
+        ))}
+        <Btn variant="outline" disabled={awayWindows.length >= 10} onClick={() => {
+          setAwayWindows((windows) => [...windows, { id: crypto.randomUUID(), label: "Away from home", enabled: true, days: ["mon", "tue", "wed", "thu", "fri"], start: "08:00", end: "16:00" }]); dirty();
+        }}>Add away period</Btn>
+        <p className="text-sm text-muted-foreground">These schedules do not detect screen locking or whether someone has left home. Idle time outside these periods can still count.</p>
       </section>
 
       <section className="panel space-y-5">

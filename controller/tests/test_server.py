@@ -91,7 +91,7 @@ class Server(unittest.TestCase):
         self.assertEqual(r.status, 200)
         self.req("POST", "/api/bonus", {"minutes": 10})
         exp = json.loads(self.req("GET", "/api/export")[1])
-        self.assertEqual(set(exp), {"schemaVersion", "timezone", "deviceLabel", "weekly", "exceptions", "leisurePaused"})
+        self.assertEqual(set(exp), {"schemaVersion", "timezone", "deviceLabel", "weekly", "exceptions", "leisurePaused", "schoolHours", "awayWindows"})
         self.assertFalse(json.loads(self.req("GET", "/api/status")[1])["enforcement"])
         bad = dict(settings, weekly=dict(settings["weekly"], mon=5000))
         self.assertEqual(self.req("POST", "/api/import", {"settings": bad})[0].status, 400)

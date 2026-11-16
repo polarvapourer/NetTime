@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Btn, Notice, PageHeader, Pill } from "@/components/nettime/ui";
 import { useNetTime } from "@/lib/nettime/use-nettime";
-import { DAY_LABELS, previewBonus, evaluatePolicy, formatMinutes, londonFromInstant, londonFromWallClock } from "@/lib/nettime/policy";
+import { DAY_LABELS, activeAway, previewBonus, evaluatePolicy, formatMinutes, londonFromInstant, londonFromWallClock } from "@/lib/nettime/policy";
 
 export const Route = createFileRoute("/preview")({
   head: () => ({ meta: [
@@ -35,6 +35,7 @@ function PreviewPage() {
   const usedOk = used !== "" && Number.isInteger(usedN) && usedN >= 0 && usedN <= 1440;
   const savedBonus = at && today ? previewBonus(bonus, at.date, today) : 0;
   const decision = ready && at && usedOk ? evaluatePolicy({ settings, at, usedMinutes: usedN, bonusMinutes: includeBonus ? savedBonus : 0 }) : null;
+  const away = ready && at ? activeAway(settings, at) : null;
   const tone = !decision ? "muted" : decision.kind.startsWith("allow") ? "primary" : decision.kind === "setup-incomplete" ? "warning" : "danger";
 
   return (
@@ -72,10 +73,11 @@ function PreviewPage() {
         {decision?.kind === "allow-exception" && <p className="text-muted-foreground">Inside “{decision.window.label}” ({decision.window.start}–{decision.window.end}). These minutes don't count.</p>}
         {decision?.kind === "block-paused" && <p className="text-muted-foreground">Leisure access is paused. Exception windows still apply.</p>}
         {decision?.kind === "setup-incomplete" && <p className="text-muted-foreground">Choose an allowance for every day on the Schedule page.</p>}
+        {away && <p className="text-muted-foreground">Away period “{away.label}” ({away.start}–{away.end}): allowance counting is paused. Access follows the rule shown above.</p>}
       </section>
 
       <Notice>
-        <strong className="text-foreground">How minutes would be counted.</strong> The separate controller counts minutes the {settings.deviceLabel} is connected with internet enabled, outside exception windows. That is <em>not</em> screen time — an idle connected device can still use minutes. The count resets at UK midnight. Nothing is being counted now.
+        <strong className="text-foreground">How minutes would be counted.</strong> The separate controller counts minutes the {settings.deviceLabel} is connected with internet enabled, outside school hours, exception windows and away periods. An idle connected device can still use minutes outside those periods. The count resets at UK midnight. Nothing is being counted now.
       </Notice>
     </div>
   );

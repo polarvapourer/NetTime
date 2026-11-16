@@ -4,7 +4,7 @@ import time
 
 from .macs import canonical_mac, is_unicast
 from .host import local_macs
-from .policy import active_exception, decide, london, setup_complete, split_charge, validate_settings
+from .policy import active_away, active_exception, decide, london, setup_complete, split_charge, validate_settings
 from .router import PinMismatch, RouterError, apply_target
 
 POLL_SECONDS = 10
@@ -33,7 +33,7 @@ class Engine(object):
         self.needs_revalidation = bool(self.st["enforcement"])
         self.status = {"router": "not-configured" if router is None else "unknown", "lastSuccess": None,
                        "lastError": None, "mode": None, "targetInList": None, "connection": "unknown",
-                       "connectionStale": None, "metering": "off", "exceptionLabel": None,
+                       "connectionStale": None, "metering": "off", "exceptionLabel": None, "awayLabel": None,
                        "rule": None, "ruleMessage": None, "entries": None}
 
     # ---------- helpers
@@ -151,6 +151,8 @@ class Engine(object):
             allowed_now = self.status["connection"] == "connected" and observed is False
             win = active_exception(self.st["settings"], lt)
             self.status["exceptionLabel"] = win["label"] if win else None
+            away = active_away(self.st["settings"], lt)
+            self.status["awayLabel"] = away["label"] if away else None
             if self.active():
                 prev = self.last_sample
                 if prev and prev[2] and allowed_now:
@@ -161,7 +163,7 @@ class Engine(object):
                             for date, sec in split_charge(self.st["settings"], start, now).items():
                                 self.st["usage"][date] = self.st["usage"].get(date, 0.0) + sec
                             self.st["chargedUntil"] = now
-                self.status["metering"] = ("exception" if allowed_now and win else "counting" if allowed_now else
+                self.status["metering"] = ("exception" if allowed_now and win else "away" if away else "counting" if allowed_now else
                                            "blocked" if observed else "not-connected")
                 self.last_sample = (now, mono, allowed_now)
             else:
@@ -361,7 +363,7 @@ class Engine(object):
         """Forget live status that belonged to the previous device so it is never shown for another one."""
         self.last_sample = None
         self.status.update(targetInList=None, connection="unknown", connectionStale=None, metering="off",
-                           exceptionLabel=None, rule=None, ruleMessage=None)
+                           exceptionLabel=None, awayLabel=None, rule=None, ruleMessage=None)
 
     def clear_target(self):
         """Unselect the device. Local only: no router contact, no router writes. Idempotent when safe."""
@@ -381,6 +383,7 @@ class Engine(object):
         with self.lock:
             if self.st["enforcement"] and not setup_complete(s):
                 raise UserError("Every day needs an allowance while blocking is on")
+            self.last_sample = None  # do not apply edited schedules to the previous sample interval
             self.st["settings"] = s  # never changes the enforcement switch
             self._save()
 

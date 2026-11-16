@@ -1,12 +1,13 @@
 # NetTime
 
-Latest release: **1.1.0**. Public releases follow [the 1.x.0 numbering policy](docs/RELEASING.md).
+Current version: **1.2.0**. Public releases follow [the 1.x.0 numbering policy](docs/RELEASING.md).
 
 Per-device internet allowances for a home network, with a local Windows, macOS or Linux controller and a browser-based schedule planner.
 
 ## What it does
 
 - Set a different allowance for each day of the week.
+- Set weekday school hours that allow access without using the allowance, and recurring away periods that pause allowance counting.
 - Add scheduled exceptions, such as an online class, that do not consume the allowance.
 - Grant extra time for the current day or pause leisure access.
 - Apply a deny-list rule to one selected device through a compatible router.
@@ -48,7 +49,7 @@ Build a portable controller package with:
 npm run package:controller
 ```
 
-The generated `public/downloads/nettime-controller-1.1.0.zip` contains the controller, its tests and setup instructions. It contains no saved configuration. The public package uses generic examples; it is separate from existing private installations.
+The generated `public/downloads/nettime-controller-1.2.0.zip` contains the controller, its tests and setup instructions. It contains no saved configuration. The public package uses generic examples; it is separate from existing private installations.
 
 The package contains Python source, not architecture-specific binaries. You can build it on one OS and run it on another with a native Python installation. Do not transfer `node_modules` across OS/CPU boundaries. See [router compatibility and adding a driver](controller/ROUTERS.md): there is no universal blocking API, and other brands need an implemented and validated adapter.
 
@@ -102,3 +103,5 @@ This is a portfolio project and an experimental home-network tool. It depends on
 | `controller/tests/` | Router, security, policy and installation regression tests |
 | `scripts/build_controller_zip.py` | Reproducible controller package builder |
 | `docs/` | Setup, architecture and example screenshots |
+
+School/away setup and precedence: [Schedules](docs/SCHEDULES.md).

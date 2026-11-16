@@ -4,6 +4,8 @@ import calendar
 from datetime import datetime, timedelta, timezone
 import re
 
+from .schedules import away_window, school_defaults, school_window, validate_schedules
+
 TIMEZONE = "Europe/London"
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 MAX_DAY_MINUTES = 1440
@@ -46,7 +48,7 @@ def default_settings():
             "weekly": {d: None for d in DAYS},
             "exceptions": [{"id": "study", "label": "Study time", "days": ["sat", "sun"],
                             "start": "11:00", "end": "12:00"}],
-            "leisurePaused": False}
+            "leisurePaused": False, "schoolHours": school_defaults(), "awayWindows": []}
 
 
 def _is_int(v):
@@ -58,7 +60,7 @@ def validate_settings(raw):
     errs = []
     if not isinstance(raw, dict):
         return None, ["file: must be a JSON object"]
-    extra = set(raw) - TOP_KEYS
+    extra = set(raw) - TOP_KEYS - {"schoolHours", "awayWindows"}
     missing = TOP_KEYS - set(raw)
     if extra:
         errs.append("file: unknown keys " + ", ".join(sorted(extra)))
@@ -89,6 +91,8 @@ def validate_settings(raw):
             err = validate_exception(e)
             if err:
                 errs.append("exceptions.%d: %s" % (i, err))
+    school, away, schedule_errors = validate_schedules(raw, parse_hhmm, validate_exception)
+    errs.extend(schedule_errors)
     if not isinstance(raw["leisurePaused"], bool):
         errs.append("leisurePaused: must be true or false")
     if errs:
@@ -96,7 +100,7 @@ def validate_settings(raw):
     s = {"schemaVersion": 1, "timezone": TIMEZONE, "deviceLabel": label.strip(),
          "weekly": {d: weekly[d] for d in DAYS},
          "exceptions": [{k: (list(e[k]) if k == "days" else e[k]) for k in ("id", "label", "days", "start", "end")} for e in exc],
-         "leisurePaused": raw["leisurePaused"]}
+         "leisurePaused": raw["leisurePaused"], "schoolHours": school, "awayWindows": away}
     return s, []
 
 
@@ -126,11 +130,18 @@ def setup_complete(s):
 
 
 def active_exception(s, lt):
+    school = school_window(s, lt, parse_hhmm)
+    if school:
+        return school
     for e in s["exceptions"]:
         a, b = parse_hhmm(e["start"]), parse_hhmm(e["end"])
         if a is not None and b is not None and lt["day"] in e["days"] and a <= lt["minute"] < b:
             return e
     return None
+
+
+def active_away(s, lt):
+    return away_window(s, lt, parse_hhmm)
 
 
 def decide(s, lt, used_seconds, bonus_minutes=0):
@@ -151,7 +162,7 @@ def decide(s, lt, used_seconds, bonus_minutes=0):
 
 
 def split_charge(s, start, end):
-    """Seconds per London date for [start, end), excluding exception windows.
+    """Seconds per London date for [start, end), excluding school, exception and away windows.
 
     London's UTC offset is a whole number of hours, so UTC minute boundaries are
     London minute boundaries; splitting per minute handles midnight, window edges and GMT/BST.
@@ -161,7 +172,7 @@ def split_charge(s, start, end):
     while t < end:
         nxt = min(float(end), (math.floor(t / 60.0) + 1) * 60.0)
         lt = london(t)
-        if active_exception(s, lt) is None:
+        if active_exception(s, lt) is None and active_away(s, lt) is None:
             out[lt["date"]] = out.get(lt["date"], 0.0) + (nxt - t)
         t = nxt
     return out

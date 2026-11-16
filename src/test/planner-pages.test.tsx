@@ -49,3 +49,30 @@ describe("Standalone planner", () => {
     expect(await screen.findByText("Block — allowance exhausted")).toBeInTheDocument();
   });
 });
+
+describe("school and away controls", () => {
+  it("saves schedules and restores them after reopening", async () => {
+    const view = await open("/schedule");
+    fireEvent.click(await screen.findByLabelText("Enable school hours"));
+    fireEvent.change(screen.getByLabelText("School start"), { target: { value: "08:30" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add away period" }));
+    fireEvent.change(screen.getByLabelText("Leave"), { target: { value: "17:00" } });
+    fireEvent.change(screen.getByLabelText("Return"), { target: { value: "19:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+    expect(await screen.findByText("Saved on this browser")).toBeInTheDocument();
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY)!);
+    expect(saved.schoolHours).toEqual({ enabled: true, start: "08:30", end: "15:00" });
+    expect(saved.awayWindows[0]).toMatchObject({ enabled: true, start: "17:00", end: "19:00", days: ["mon", "tue", "wed", "thu", "fri"] });
+    await view.navigate({ to: "/preview" }); cleanup(); await open("/schedule");
+    expect(await screen.findByLabelText("Enable school hours")).toBeChecked();
+    expect(screen.getByLabelText("School start")).toHaveValue("08:30");
+    expect(screen.getByLabelText("Leave")).toHaveValue("17:00");
+  });
+  it("prevents invalid school hours from being saved", async () => {
+    await open("/schedule");
+    fireEvent.change(await screen.findByLabelText("School end"), { target: { value: "08:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Fix the highlighted fields");
+    expect(JSON.parse(localStorage.getItem(SETTINGS_KEY)!).schoolHours.end).toBe("15:00");
+  });
+});

@@ -3,7 +3,7 @@
   var DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
   var LABEL = {mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun"};
   var KEY = "nettime.key";
-  var state = null, lost = false, lastDevices = null;
+  var state = null, lost = false, lastDevices = null, awayDraft = [];
   var $ = function (id) { return document.getElementById(id); };
 
   // Optional one-time link: #key=... is read, stored in this tab only, and removed from the address bar.
@@ -24,17 +24,17 @@
   function say(t, bad) { var m = $("msg"); m.hidden = false; m.textContent = t; m.className = "notice" + (bad ? " warn" : ""); }
   function fmt(sec) { var m = Math.floor(sec / 60); return (m >= 60 ? Math.floor(m / 60) + "h " : "") + (m % 60) + "m"; }
   function ago(ts) { return ts ? new Date(ts * 1000).toLocaleTimeString("en-GB", {timeZone: "Europe/London"}) + " (London)" : "never"; }
-  var MUTATORS = ["enf-btn", "resume-btn", "release-btn", "save", "bonus-btn", "bonus-clear", "discover", "export", "import-file", "bulk-wd-btn", "bulk-we-btn", "unselect-btn"];
+  var MUTATORS = ["enf-btn", "resume-btn", "release-btn", "save", "bonus-btn", "bonus-clear", "discover", "export", "import-file", "bulk-wd-btn", "bulk-we-btn", "unselect-btn", "away-add"];
   function setLost(on) {
     lost = on; $("lost").hidden = !on;
     if (on) {
       MUTATORS.forEach(function (id) { $(id).disabled = true; });
-      Array.prototype.forEach.call(document.querySelectorAll("#devices button"), function (b) { b.disabled = true; });
+      Array.prototype.forEach.call(document.querySelectorAll("#devices button, #away-windows button"), function (b) { b.disabled = true; });
       $("mode-pill").textContent = "Controller connection unknown"; $("mode-pill").className = "pill bad";
     } else {
       MUTATORS.forEach(function (id) { $(id).disabled = false; });
       if (state) renderSelection(state);
-      Array.prototype.forEach.call(document.querySelectorAll("#devices button"), function (b) { b.disabled = false; });
+      Array.prototype.forEach.call(document.querySelectorAll("#devices button, #away-windows button"), function (b) { b.disabled = false; });
     }
   }
 
@@ -43,7 +43,7 @@
   var STATUS_TEXT = {
     router: {ok: "Connected", error: "Error", "tls-pin": "Certificate changed — re-run setup", unknown: "Checking…", "not-configured": "Not set up"},
     connection: {connected: "Router reports this address connected", "not-connected": "This address not connected (or the selected device's Wi-Fi address changed)", "not-listed": "Not in router's list", unknown: "Unknown"},
-    metering: {off: "Not counting (observation only)", counting: "Counting", exception: "Exception — time not counted", blocked: "Not counting (blocked)", "not-connected": "Not counting (not connected)", unknown: "Unknown — router not answering"}
+    metering: {off: "Not counting (observation only)", counting: "Counting", exception: "Exception — time not counted", away: "Away — allowance counting paused", blocked: "Not counting (blocked)", "not-connected": "Not counting (not connected)", unknown: "Unknown — router not answering"}
   };
 
   function render(s) {
@@ -61,6 +61,7 @@
       ["In router deny list", st.targetInList == null ? "Unknown" : st.targetInList ? "Yes" : "No"],
       ["Wi-Fi connection", (STATUS_TEXT.connection[st.connection] || st.connection) + (st.connectionStale ? " (last known: " + (STATUS_TEXT.connection[st.connectionStale] || st.connectionStale) + ", stale)" : "")],
       ["Time counting", st.metering === "exception" ? (st.exceptionLabel || "Exception") + " exception — time not counted" : (STATUS_TEXT.metering[st.metering] || st.metering)],
+      ["Away period", st.awayLabel || "None"],
       ["Used today (" + t.date + ")", fmt(t.usedSeconds) + (t.bonusMinutes ? " · +" + t.bonusMinutes + "m extra" : "")],
       ["Rule now", t.decision.label],
       ["Last router change", st.ruleMessage || "None"]
@@ -120,13 +121,47 @@
       ["start", "end"].forEach(function (k) { var i = el("input"); i.type = "time"; i.value = e[k]; i.id = "ex-" + n + "-" + k; row.appendChild(i); });
       ex.appendChild(row);
     });
+    var school = set.schoolHours || {enabled: false, start: "09:00", end: "15:00"};
+    $("school-enabled").checked = school.enabled;
+    $("school-start").value = school.start;
+    $("school-end").value = school.end;
+    awayDraft = JSON.parse(JSON.stringify(set.awayWindows || []));
+    renderAway();
     $("paused-box").checked = set.leisurePaused;
+  }
+
+  function collectAway() {
+    return awayDraft.map(function (w, n) {
+      return {id: w.id, label: $("away-" + n + "-label").value.trim(),
+        enabled: $("away-" + n + "-enabled").checked,
+        days: DAYS.filter(function (d) { return $("away-" + n + "-" + d).checked; }),
+        start: $("away-" + n + "-start").value, end: $("away-" + n + "-end").value};
+    });
+  }
+  function renderAway() {
+    var box = $("away-windows"); box.textContent = "";
+    awayDraft.forEach(function (w, n) {
+      var group = el("fieldset", null, "away-period"); group.appendChild(el("legend", "Away period " + (n + 1)));
+      var row = el("div", null, "row");
+      var name = el("label", "Name "), text = el("input"); text.id = "away-" + n + "-label"; text.value = w.label; text.maxLength = 40; name.appendChild(text); row.appendChild(name);
+      var toggle = el("label", "Enabled "), check = el("input"); check.type = "checkbox"; check.id = "away-" + n + "-enabled"; check.checked = w.enabled; toggle.appendChild(check); row.appendChild(toggle);
+      ["start", "end"].forEach(function (k) { var label = el("label", k === "start" ? "Leave " : "Return "), input = el("input"); input.type = "time"; input.id = "away-" + n + "-" + k; input.value = w[k]; label.appendChild(input); row.appendChild(label); });
+      group.appendChild(row);
+      var days = el("div", null, "row");
+      DAYS.forEach(function (d) { var label = el("label", LABEL[d] + " "), input = el("input"); input.type = "checkbox"; input.id = "away-" + n + "-" + d; input.checked = w.days.indexOf(d) >= 0; label.appendChild(input); days.appendChild(label); });
+      group.appendChild(days);
+      var remove = el("button", "Remove away period", "ghost"); remove.type = "button"; remove.disabled = lost;
+      remove.addEventListener("click", function () { awayDraft = collectAway(); awayDraft.splice(n, 1); renderAway(); }); group.appendChild(remove); box.appendChild(group);
+    });
+    $("away-add").disabled = lost || awayDraft.length >= 10;
   }
 
   function collect() {
     var s = JSON.parse(JSON.stringify(state.settings));
     DAYS.forEach(function (d) { var v = $("day-" + d).value.trim(); s.weekly[d] = v === "" ? null : Number(v); });
     s.exceptions.forEach(function (e, n) { e.start = $("ex-" + n + "-start").value; e.end = $("ex-" + n + "-end").value; });
+    s.schoolHours = {enabled: $("school-enabled").checked, start: $("school-start").value, end: $("school-end").value};
+    s.awayWindows = collectAway();
     s.leisurePaused = $("paused-box").checked;
     return s;
   }
@@ -141,6 +176,13 @@
   }
   function act(p) { return p.then(function (r) { say(r.message || "Done"); return refresh(); }).catch(function (e) { if (e.lost) setLost(true); else say(e.message, true); }); }
 
+  $("away-add").addEventListener("click", function () {
+    awayDraft = collectAway();
+    if (awayDraft.length >= 10) return;
+    awayDraft.push({id: "away-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9), label: "Away from home", enabled: true,
+      days: ["mon", "tue", "wed", "thu", "fri"], start: "08:00", end: "16:00"});
+    renderAway();
+  });
   $("login-form").addEventListener("submit", function (ev) { ev.preventDefault(); sessionStorage.setItem(KEY, $("key").value.trim()); $("key").value = ""; refresh(true); });
   $("save").addEventListener("click", function () { act(api("POST", "/api/settings", {settings: collect()})); });
   $("bulk-wd-btn").addEventListener("click", function () { ["mon", "tue", "wed", "thu", "fri"].forEach(function (d) { $("day-" + d).value = $("bulk-wd").value; }); });

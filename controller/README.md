@@ -1,4 +1,4 @@
-# NetTime controller 1.1.0
+# NetTime controller 1.2.0
 
 Run this Python controller on a separate always-on computer or on your main computer: Windows, macOS on Apple Silicon (M1 and newer) or Intel, and Linux including Raspberry Pi OS. Your management/build computer can use any of those platforms independently. No Pi or Node.js is required to run the controller.
 
@@ -56,3 +56,15 @@ Windows: `%LOCALAPPDATA%\NetTime`; macOS: `~/Library/Application Support/NetTime
 POSIX uses 700/600 modes; Windows uses current-user/SYSTEM ACLs. Credentials are password-equivalent and unencrypted at rest. Never upload the data directory. Read the repository's SECURITY.md for boundaries.
 
 Before updating or moving devices, turn blocking off and confirm internet returns, then stop the old job. Replace this package and restart it, keeping the separate private data folder. Reinstall the background job if its Python executable or package path changes. Run `doctor` afterwards. Stopping/removing the job does not remove router rules.
+
+## School hours and away periods
+
+In the controller dashboard's Schedule section, enable School hours and set its start/end times. This applies Monday–Friday, allows access even with no allowance left or while leisure access is paused, and never uses allowance minutes. Turn it off for school holidays. It starts disabled after an update.
+
+Use Add away period to enter a name, days, departure/return times and an enabled switch. Up to ten recurring periods are supported. Away periods stop allowance counting only: normal access rules still apply. For a period crossing midnight, tick the day you leave (for example Sunday 22:00 to Monday 07:00). Equal start/end times are rejected.
+
+Press Save schedule. All times use Europe/London, including BST/GMT changes. Starts are included; ends are excluded. Overlaps never charge twice. School hours and existing allowed exceptions take priority over exhausted or paused leisure access. Used time is retained when a period ends.
+
+These are scheduled exclusions, not detection of screen locking or actual absence. Outside them an idle, connected and allowed device can still use its allowance. The Linksys MAC filter still denies Wi-Fi association while blocked.
+
+Existing settings without these fields load with school hours disabled and no away periods. Settings exports now include schoolHours and awayWindows; older program versions cannot read these exports. Keep a private backup before updating or downgrading. Login, key, selected device, usage and other exceptions are retained.

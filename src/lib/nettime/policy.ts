@@ -13,6 +13,10 @@ export type WeeklyAllowance = Record<Day, number | null>;
 
 /** Start inclusive, end exclusive, same day, "HH:MM" London wall time. */
 export interface ExceptionWindow { id: string; label: string; days: Day[]; start: string; end: string }
+export interface SchoolHours { enabled: boolean; start: string; end: string }
+export interface AwayWindow extends ExceptionWindow { enabled: boolean }
+export const WEEKDAYS: Day[] = ["mon", "tue", "wed", "thu", "fri"];
+export const defaultSchoolHours = (): SchoolHours => ({ enabled: false, start: "09:00", end: "15:00" });
 
 export interface NetTimeSettings {
   schemaVersion: 1;
@@ -21,6 +25,8 @@ export interface NetTimeSettings {
   weekly: WeeklyAllowance;
   exceptions: ExceptionWindow[];
   leisurePaused: boolean;
+  schoolHours: SchoolHours;
+  awayWindows: AwayWindow[];
 }
 
 /** Today-only extra allowance, scoped to a London calendar date. */
@@ -34,6 +40,8 @@ export function defaultSettings(): NetTimeSettings {
     weekly: { mon: null, tue: null, wed: null, thu: null, fri: null, sat: null, sun: null },
     exceptions: [{ id: "study", label: "Study time", days: ["sat", "sun"], start: "11:00", end: "12:00" }],
     leisurePaused: false,
+    schoolHours: defaultSchoolHours(),
+    awayWindows: [],
   };
 }
 
@@ -99,10 +107,40 @@ export function londonFromInstant(instant: Date): LondonTime {
 }
 
 export function activeException(s: NetTimeSettings, t: LondonTime): ExceptionWindow | null {
+  const school = s.schoolHours;
+  if (school?.enabled && WEEKDAYS.includes(t.day)) {
+    const a = parseHHMM(school.start), b = parseHHMM(school.end);
+    if (a !== null && b !== null && a < b && a <= t.minuteOfDay && t.minuteOfDay < b)
+      return { id: "school-hours", label: "School hours", days: WEEKDAYS, start: school.start, end: school.end };
+  }
   return s.exceptions.find((e) => {
     const a = parseHHMM(e.start), b = parseHHMM(e.end);
     return a !== null && b !== null && a < b && e.days.includes(t.day) && t.minuteOfDay >= a && t.minuteOfDay < b;
   }) ?? null;
+}
+
+export function validateAway(e: Pick<ExceptionWindow, "days" | "start" | "end">): string | null {
+  if (!e.days.length) return "Choose at least one day.";
+  const a = parseHHMM(e.start), b = parseHHMM(e.end);
+  if (a === null || b === null) return "Times must be HH:MM (24-hour).";
+  if (a === b) return "Start and end cannot be the same.";
+  return null;
+}
+
+export function activeAway(s: NetTimeSettings, t: LondonTime): AwayWindow | null {
+  const previous = DAYS[(DAYS.indexOf(t.day) + 6) % 7]!;
+  return (s.awayWindows ?? []).find((w) => {
+    if (!w.enabled) return false;
+    const a = parseHHMM(w.start), b = parseHHMM(w.end);
+    if (a === null || b === null || a === b) return false;
+    return a < b ? w.days.includes(t.day) && a <= t.minuteOfDay && t.minuteOfDay < b
+      : (w.days.includes(t.day) && t.minuteOfDay >= a) || (w.days.includes(previous) && t.minuteOfDay < b);
+  }) ?? null;
+}
+
+/** School/exception periods also allow access; away periods only pause counting. */
+export function nonCountingWindow(s: NetTimeSettings, t: LondonTime): ExceptionWindow | null {
+  return activeException(s, t) ?? activeAway(s, t);
 }
 
 /** Current Europe/London calendar date for an instant (default: now). */
@@ -127,7 +165,7 @@ export type Decision =
   | { kind: "block-exhausted"; label: "Block — allowance exhausted"; total: number };
 
 /**
- * usedMinutes = internet-enabled connected minutes outside exception windows,
+ * usedMinutes = internet-enabled connected minutes outside school, exception and away windows,
  * counted since London midnight of `t.date`. It is NOT screen time.
  */
 export function evaluatePolicy(input: {

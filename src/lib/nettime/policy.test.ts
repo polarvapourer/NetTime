@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultSettings, evaluatePolicy, londonFromInstant, londonFromWallClock, validateException, type NetTimeSettings } from "./policy";
 import { addBonus, exportSettingsJson, importSettingsJson } from "./storage";
-import { bonusFor } from "./policy";
+import { activeAway, nonCountingWindow, bonusFor } from "./policy";
 
 function configured(mins = 60): NetTimeSettings {
   const s = defaultSettings();
@@ -92,5 +92,45 @@ describe("import/export", () => {
     expect(importSettingsJson(JSON.stringify({ ...base, schemaVersion: 2 })).ok).toBe(false);
     expect(importSettingsJson(JSON.stringify({ ...base, weekly: { ...base.weekly, mon: 1441 } })).ok).toBe(false);
     expect(importSettingsJson(JSON.stringify({ ...base, bonus: { minutes: 30 } })).ok).toBe(false);
+  });
+});
+
+describe("school and away schedules", () => {
+  const school = () => ({ ...configured(0), schoolHours: { enabled: true, start: "09:00", end: "15:00" } });
+  const away = () => ({ ...configured(60), awayWindows: [{ id: "away", label: "Away", enabled: true, days: ["sun"] as (keyof NetTimeSettings["weekly"])[], start: "22:00", end: "07:00" }] });
+  it("school allows at the start, stops at the end, and excludes weekends", () => {
+    const s = { ...school(), leisurePaused: true };
+    for (const [time, kind] of ([["08:59", "block-paused"], ["09:00", "allow-exception"], ["14:59", "allow-exception"], ["15:00", "block-paused"]] as const))
+      expect(evaluatePolicy({ settings: s, at: at("2026-11-16", time), usedMinutes: 100 }).kind).toBe(kind);
+    expect(evaluatePolicy({ settings: s, at: at("2026-11-14", "09:00"), usedMinutes: 100 }).kind).toBe("block-paused");
+  });
+  it("matches overnight away periods to the departure day without allowing exhausted access", () => {
+    const s = away();
+    expect(activeAway(s, at("2026-11-15", "21:59"))).toBeNull();
+    expect(activeAway(s, at("2026-11-15", "22:00"))?.label).toBe("Away");
+    expect(nonCountingWindow(s, at("2026-11-16", "06:59"))?.label).toBe("Away");
+    expect(activeAway(s, at("2026-11-16", "07:00"))).toBeNull();
+    expect(evaluatePolicy({ settings: s, at: at("2026-11-16", "06:59"), usedMinutes: 60 }).kind).toBe("block-exhausted");
+    s.awayWindows[0]!.enabled = false;
+    expect(activeAway(s, at("2026-11-16", "06:59"))).toBeNull();
+  });
+  it("keeps school and away schedules through export and accepts legacy files disabled", () => {
+    const s = { ...away(), schoolHours: school().schoolHours };
+    expect(importSettingsJson(exportSettingsJson(s))).toEqual({ ok: true, settings: s });
+    const old = JSON.parse(exportSettingsJson(s)); delete old.schoolHours; delete old.awayWindows;
+    const result = importSettingsJson(JSON.stringify(old));
+    expect(result.ok && result.settings.schoolHours.enabled).toBe(false);
+    expect(result.ok && result.settings.awayWindows).toEqual([]);
+  });
+  it("rejects invalid school/away times, unknown keys, duplicate ids and oversized lists", () => {
+    const s = away();
+    const rejected = (patch: object) => expect(importSettingsJson(JSON.stringify({ ...s, ...patch })).ok).toBe(false);
+    rejected({ schoolHours: { enabled: true, start: "15:00", end: "09:00" } });
+    rejected({ schoolHours: { enabled: "yes", start: "09:00", end: "15:00" } });
+    rejected({ awayWindows: [{ ...s.awayWindows[0], days: [] }] });
+    rejected({ awayWindows: [{ ...s.awayWindows[0], end: "22:00" }] });
+    rejected({ awayWindows: [{ ...s.awayWindows[0], token: "secret" }] });
+    rejected({ awayWindows: [s.awayWindows[0], s.awayWindows[0]] });
+    rejected({ awayWindows: Array.from({ length: 11 }, (_, i) => ({ ...s.awayWindows[0], id: String(i) })) });
   });
 });

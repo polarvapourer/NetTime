@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DAYS, TIMEZONE, defaultSettings, validateException, type DailyBonus, type NetTimeSettings } from "./policy";
+import { DAYS, TIMEZONE, defaultSettings, defaultSchoolHours, validateAway, validateException, type DailyBonus, type NetTimeSettings } from "./policy";
 
 export const SETTINGS_KEY = "nettime.settings.v1";
 export const BONUS_KEY = "nettime.bonus.v1";
@@ -20,6 +20,21 @@ export const settingsSchema = z.object({
     if (err) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Exception "${e.label}": ${err}` });
   })).max(10),
   leisurePaused: z.boolean(),
+  schoolHours: z.object({ enabled: z.boolean(), start: z.string(), end: z.string() }).strict()
+    .superRefine((s, ctx) => {
+      const error = validateException({ days: ["mon"], start: s.start, end: s.end });
+      if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+    }).default(defaultSchoolHours),
+  awayWindows: z.array(z.object({
+    id: z.string().min(1).max(64), label: z.string().min(1).max(40), enabled: z.boolean(),
+    days: z.array(dayEnum), start: z.string(), end: z.string(),
+  }).strict().superRefine((w, ctx) => {
+    const error = validateAway(w);
+    if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+  })).max(10).superRefine((windows, ctx) => {
+    if (new Set(windows.map((w) => w.id)).size !== windows.length)
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Away period ids must be unique." });
+  }).default([]),
 }).strict();
 
 export type ParseResult = { ok: true; settings: NetTimeSettings } | { ok: false; errors: string[] };
@@ -38,8 +53,8 @@ export function importSettingsJson(text: string): ParseResult {
 
 /** Export only the weekly rules. Today's bonus is deliberately excluded. */
 export function exportSettingsJson(s: NetTimeSettings): string {
-  const { schemaVersion, timezone, deviceLabel, weekly, exceptions, leisurePaused } = s;
-  return JSON.stringify({ schemaVersion, timezone, deviceLabel, weekly, exceptions, leisurePaused }, null, 2);
+  const { schemaVersion, timezone, deviceLabel, weekly, exceptions, leisurePaused, schoolHours, awayWindows } = s;
+  return JSON.stringify({ schemaVersion, timezone, deviceLabel, weekly, exceptions, leisurePaused, schoolHours, awayWindows }, null, 2);
 }
 
 export function loadSettings(storage: Storage): NetTimeSettings {

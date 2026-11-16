@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- Add opt-in weekday school hours: allow access without charging the allowance, including when leisure access is paused or exhausted.
+- Add recurring away periods with per-period days, times and enable switches, including overnight periods. Away periods pause counting while keeping the normal access policy.
+- Exclude scheduled periods at exact London time boundaries, preserve used time, and clear the previous metering sample when schedules are edited.
+- Add controller and planner controls, status/preview explanations, validation, import/export support and migration from existing settings with both features disabled.
+
 ## 1.1.0
 
 - Build, package and manage NetTime from Windows, Linux, Apple Silicon macOS or Intel macOS.

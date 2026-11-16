@@ -18,3 +18,5 @@ input[type=number]{width:90px}.row{display:flex;flex-wrap:wrap;gap:8px;align-ite
 .notice{border:1px solid var(--border);border-radius:8px;padding:10px 12px}.notice.warn{border-color:var(--warn)}
 .dev{display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--border);padding:8px 0;font-size:14px}
 .check{display:block;margin:12px 0}code{color:var(--teal)}
+
+.away-period{border:1px solid var(--border);border-radius:8px;padding:12px;margin:12px 0}.away-period legend{color:var(--muted);padding:0 6px}

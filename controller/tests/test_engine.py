@@ -442,3 +442,54 @@ class Unselect(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScheduleEngine(Base):
+    def away_settings(self, start, end):
+        s = self.e.snapshot()['settings']
+        s['awayWindows'] = [{'id': 'away-test', 'label': 'Out of home', 'enabled': True,
+                             'days': ['mon'], 'start': start, 'end': end}]
+        return s
+
+    def test_school_unblocks_and_reblocks_without_charging(self):
+        self.clock.t = utc(2026, 11, 16, 8, 59, 40)
+        self.configure(minutes=0)
+        self.e.save_settings(dict(self.e.snapshot()['settings'], schoolHours={'enabled': True, 'start': '09:00', 'end': '15:00'}))
+        self.e.tick(); self.e.set_enforcement(True); self.run_for(10)
+        self.assertIn(IPAD, self.t.macs)
+        self.run_for(20)
+        self.assertNotIn(IPAD, self.t.macs); self.assertIn(OTHER, self.t.macs)
+        self.run_for(40)
+        self.assertEqual(self.e.snapshot()['today']['usedSeconds'], 0)
+        self.assertEqual(self.e.snapshot()['status']['metering'], 'exception')
+        self.clock.t = utc(2026, 11, 16, 15); self.e.tick()
+        self.assertIn(IPAD, self.t.macs)
+
+    def test_away_usage_pauses_resumes_and_survives_restart(self):
+        self.clock.t = utc(2026, 11, 16, 7, 59, 30)
+        self.configure(minutes=600)
+        self.e.save_settings(self.away_settings('08:00', '08:01'))
+        self.e.tick(); self.e.set_enforcement(True); self.run_for(100)
+        self.assertEqual(self.e.snapshot()['status']['metering'], 'counting')
+        self.assertEqual(self.e.snapshot()['today']['usedSeconds'], 30)  # 20 before, 10 after
+        self.assertEqual(self.t.writes(), [])
+        self.assertEqual(self.new_engine().snapshot()['settings']['awayWindows'], self.e.snapshot()['settings']['awayWindows'])
+        self.assertEqual(self.new_engine().snapshot()['today']['usedSeconds'], 30)
+
+    def test_away_status_does_not_release_exhausted_block(self):
+        self.configure(minutes=0)
+        self.e.save_settings(self.away_settings('08:00', '16:00'))
+        self.e.tick(); self.e.set_enforcement(True); self.run_for(30)
+        self.assertIn(IPAD, self.t.macs)
+        self.assertEqual(self.e.snapshot()['status']['metering'], 'away')
+        self.assertEqual(self.e.snapshot()['status']['awayLabel'], 'Out of home')
+        self.assertEqual(self.e.snapshot()['today']['usedSeconds'], 0)
+
+    def test_schedule_edit_does_not_retroactively_change_last_interval(self):
+        self.configure(minutes=600); self.e.tick(); self.e.set_enforcement(True)
+        self.run_for(20)
+        before = self.e.snapshot()['today']['usedSeconds']
+        self.clock.advance(5)
+        self.e.save_settings(self.away_settings('16:00', '17:00'))
+        self.run_for(10)
+        self.assertEqual(self.e.snapshot()['today']['usedSeconds'], before)
