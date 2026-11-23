@@ -2,6 +2,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from nettime.engine import Engine, UserError
 from nettime.policy import init_tz, validate_settings
@@ -225,14 +226,50 @@ class Review(Base):
         self.assertEqual(self.e.resume(), "Router checked; automation resumed")
         self.assertFalse(self.e.snapshot()["ownedBlock"])
 
-    def test_uncertain_write_that_applied_is_owned_after_reconcile(self):
+    def test_resume_does_not_claim_an_unconfirmed_block(self):
         self.configure(minutes=0)
         self.t.fail_get_after_set = True
         self.e.tick(); self.e.set_enforcement(True); self.run_for(10)
-        self.e.resume()
-        self.assertTrue(self.e.snapshot()["ownedBlock"])
+        with self.assertRaisesRegex(UserError, "could not confirm who added"):
+            self.e.resume()
+        self.assertFalse(self.e.snapshot()["ownedBlock"])
         self.e.set_enforcement(False)
-        self.assertNotIn(IPAD, self.t.macs)
+        self.assertIn(IPAD, self.t.macs)
+
+    def test_router_write_has_durable_intent_before_submission(self):
+        self.configure(minutes=0)
+        self.e.tick(); self.e.set_enforcement(True)
+        original = self.r.set_filter
+
+        def apply_and_stop(macs):
+            st = self.store.load_state()
+            self.assertEqual(st["pending"]["status"], "write-in-progress")
+            self.assertFalse(st["ownedBlock"])
+            original(macs)
+            raise SystemExit
+
+        self.r.set_filter = apply_and_stop
+        try:
+            with self.assertRaises(SystemExit):
+                self.run_for(10)
+        finally:
+            self.r.set_filter = original
+
+        self.e = self.new_engine()
+        self.assertTrue(self.e.snapshot()["observationOnly"])
+        self.e.tick()
+        self.assertEqual(len(self.t.writes()), 1)
+        self.assertIn("may remain", self.e.set_enforcement(False))
+        self.assertIn(IPAD, self.t.macs)
+
+    def test_storage_failure_pauses_enforcement_before_write(self):
+        self.configure(minutes=0)
+        self.e.tick(); self.e.set_enforcement(True)
+        with patch.object(self.store, "save_state", side_effect=OSError("disk error")):
+            with self.assertRaises(OSError):
+                self.run_for(10)
+        self.assertTrue(self.e.snapshot()["observationOnly"])
+        self.assertEqual(self.t.writes(), [])
 
     def uncertain_add_then_stop(self):
         self.configure(minutes=0)

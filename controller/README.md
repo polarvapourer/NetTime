@@ -1,4 +1,4 @@
-# NetTime controller 1.2.0
+# NetTime controller 1.3.0
 
 Run this Python controller on a separate always-on computer or on your main computer: Windows, macOS on Apple Silicon (M1 and newer) or Intel, and Linux including Raspberry Pi OS. Your management/build computer can use any of those platforms independently. No Pi or Node.js is required to run the controller.
 
@@ -25,7 +25,7 @@ python3 -m nettime serve
 
 The built-in adapter targets compatible Linksys JNAP routers. Only M60CF-EU has a recorded live block/restore check. Other brands need an adapter implementing their actual management interface; there is no universal blocking API. Read `ROUTERS.md` in this package before using another router.
 
-Setup pins the router certificate after your confirmation and reads its settings without enabling blocking. Keep the displayed dashboard key private. The password prompt is hidden. Stop foreground operation with Ctrl+C before optionally running `service install` using the same Python command.
+Setup pins the router certificate and reads its settings without enabling blocking. If you have an independently verified SHA-256 fingerprint, pass it with `--expected-fingerprint` to require a match before entering credentials. Keep the displayed dashboard key private. Stop foreground operation with Ctrl+C before optionally running `service install` using the same Python command.
 
 | Host | Background startup |
 | --- | --- |

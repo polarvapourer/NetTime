@@ -1,1 +1,1 @@
-377a8f69f5d3d743c07924e46220da269fd31b048484b109b0e5a20204baecfe  nettime-controller-1.2.0.zip
+a3d906de2cea41f38b87998de61aa8b7477c7295f8421ebedab7541b4bea497f  nettime-controller-1.3.0.zip

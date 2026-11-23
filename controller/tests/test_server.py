@@ -100,6 +100,10 @@ class Server(unittest.TestCase):
     def test_body_limit(self):
         self.assertEqual(self.req("POST", "/api/import", {"settings": "x" * 70000})[0].status, 413)
 
+    def test_body_length_must_be_a_decimal_byte_count(self):
+        r, _ = self.req("POST", "/api/import", {}, headers={"Content-Length": "-1"})
+        self.assertEqual(r.status, 400)
+
     def test_files_private(self):
         self.req("POST", "/api/bonus", {"minutes": 1})
         self.assertTrue(private_ok(self.dir, 0o700))

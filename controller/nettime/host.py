@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from .macs import canonical_mac, is_unicast
+from .store import check_storage_path
 
 
 def parse_macs(text):
@@ -43,6 +44,10 @@ class ControllerLock(object):
         self.file = None
 
     def __enter__(self):
+        try:
+            check_storage_path(self.path)
+        except FileNotFoundError:
+            pass
         self.file = open(self.path, "a+b")
         try:
             self.file.seek(0, 2)

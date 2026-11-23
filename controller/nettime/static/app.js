@@ -3,12 +3,16 @@
   var DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
   var LABEL = {mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun"};
   var KEY = "nettime.key";
+  var MAX_IMPORT = 64 * 1024;
   var state = null, lost = false, lastDevices = null, awayDraft = [];
   var $ = function (id) { return document.getElementById(id); };
 
   // Optional one-time link: #key=... is read, stored in this tab only, and removed from the address bar.
   if (location.hash.indexOf("#key=") === 0) {
-    sessionStorage.setItem(KEY, decodeURIComponent(location.hash.slice(5)));
+    try {
+      var linkKey = decodeURIComponent(location.hash.slice(5));
+      if (/^[A-Za-z0-9_-]{1,200}$/.test(linkKey)) sessionStorage.setItem(KEY, linkKey);
+    } catch (e) { /* Ignore malformed fragments. */ }
     history.replaceState(null, "", location.pathname);
   }
 
@@ -216,11 +220,12 @@
   });
   $("import-file").addEventListener("change", function (ev) {
     var f = ev.target.files[0]; if (!f) return;
+    ev.target.value = "";
+    if (f.size > MAX_IMPORT) { say("Settings file exceeds 64 KiB.", true); return; }
     f.text().then(function (txt) {
       var parsed; try { parsed = JSON.parse(txt); } catch (e) { say("File is not valid JSON.", true); return; }
       return api("POST", "/api/import", {settings: parsed}).then(function (r) { say(r.message); return refresh(true); });
     }).catch(function (e) { say(e.message, true); });
-    ev.target.value = "";
   });
 
   if (sessionStorage.getItem(KEY)) refresh(true); else showLogin();

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Btn, Notice, PageHeader } from "@/components/nettime/ui";
 import { useNetTime } from "@/lib/nettime/use-nettime";
-import { exportSettingsJson, importSettingsJson } from "@/lib/nettime/storage";
+import { exportSettingsJson, importSettingsJson, MAX_SETTINGS_BYTES } from "@/lib/nettime/storage";
 
 export const Route = createFileRoute("/data")({
   head: () => ({ meta: [
@@ -28,7 +28,14 @@ function DataPage() {
   const onFile = async (f: File | undefined) => {
     setErrors([]); setMsg(null);
     if (!f) return;
-    const r = importSettingsJson(await f.text());
+    if (f.size > MAX_SETTINGS_BYTES) return setErrors(["Settings file exceeds 64 KiB."]);
+    let text: string;
+    try {
+      text = await f.text();
+    } catch {
+      return setErrors(["Could not read the settings file."]);
+    }
+    const r = importSettingsJson(text);
     if (!r.ok) return setErrors(r.errors);
     save(r.settings); setMsg("Imported. Saved on this browser.");
   };

@@ -3,6 +3,7 @@ import json
 import os
 import stat
 import sys
+import tempfile
 
 from .policy import default_settings, validate_settings
 from .macs import canonical_mac
@@ -33,20 +34,37 @@ def restrict(path, directory=False):
 
 def ensure_private_dir(path):
     os.makedirs(path, mode=0o700, exist_ok=True)
+    check_storage_path(path, directory=True)
     restrict(path, directory=True)
 
 
+def check_storage_path(path, directory=False):
+    info = os.lstat(path)
+    expected = stat.S_ISDIR if directory else stat.S_ISREG
+    if (not expected(info.st_mode)
+            or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+            or (not directory and info.st_nlink != 1)):
+        raise ValueError("Expected an ordinary private %s at %s" % ("directory" if directory else "file", path))
+    if os.name != "nt" and info.st_uid != os.geteuid():
+        raise ValueError("NetTime account must own %s" % path)
+    return info
+
+
 def atomic_write_json(path, obj):
-    tmp = path + ".tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        json.dump(obj, f, indent=1, sort_keys=True)
-        f.flush()
-        os.fsync(f.fileno())
-    restrict(tmp)
-    os.replace(tmp, path)
+    parent = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(prefix="." + os.path.basename(path) + ".", suffix=".tmp", dir=parent)
     try:
-        dfd = os.open(os.path.dirname(path) or ".", os.O_RDONLY)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            restrict(tmp)
+            json.dump(obj, f, indent=1, sort_keys=True)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+    try:
+        dfd = os.open(parent, os.O_RDONLY)
         try:
             os.fsync(dfd)
         finally:
@@ -56,15 +74,19 @@ def atomic_write_json(path, obj):
 
 
 def read_json(path):
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
 def private_ok(path, want):
-    if os.name == "nt":
-        from .windows_acl import private_ok as acl_ok
-        return acl_ok(path)
-    return stat.S_IMODE(os.stat(path).st_mode) == want
+    try:
+        info = check_storage_path(path, directory=want == 0o700)
+        if os.name == "nt":
+            from .windows_acl import private_ok as acl_ok
+            return acl_ok(path)
+        return stat.S_IMODE(info.st_mode) == want
+    except (ValueError, OSError):
+        return False
 
 
 def default_state():
@@ -82,17 +104,30 @@ class Store(object):
     def init(self):
         ensure_private_dir(self.dir)
 
+    def _load(self, path, default):
+        try:
+            check_storage_path(self.dir, directory=True)
+            check_storage_path(path)
+        except FileNotFoundError:
+            return default
+        if not private_ok(self.dir, 0o700) or not private_ok(path, 0o600):
+            raise ValueError("NetTime data must be private to the controller account: %s" % path)
+        return read_json(path)
+
     def load_config(self):
-        return read_json(self.config_path) if os.path.exists(self.config_path) else None
+        cfg = self._load(self.config_path, {})
+        if not isinstance(cfg, dict):
+            raise ValueError("config.json must be an object")
+        return cfg or None
 
     def save_config(self, cfg):
         self.init()
         atomic_write_json(self.config_path, cfg)
 
     def load_state(self):
-        if not os.path.exists(self.state_path):
-            return default_state()
-        st = read_json(self.state_path)  # corrupt file -> error (fail closed, usage is never silently reset)
+        st = self._load(self.state_path, default_state())
+        if not isinstance(st, dict):
+            raise ValueError("state.json must be an object")
         s, errs = validate_settings(st.get("settings"))
         if errs or not isinstance(st.get("usage"), dict):
             raise ValueError("state.json is invalid: " + "; ".join(errs))

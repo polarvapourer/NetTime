@@ -18,9 +18,12 @@ class Install(unittest.TestCase):
             z = os.path.join(d, "nettime-pi.zip")
             subprocess.check_call([sys.executable, SCRIPT, z], stdout=subprocess.DEVNULL)
             home, pkg, fake = os.path.join(d, "home"), os.path.join(d, "home", "nettime"), os.path.join(d, "bin")
-            os.makedirs(os.path.join(home, ".local", "share", "nettime")); os.makedirs(fake)
-            with open(os.path.join(home, ".local", "share", "nettime", "config.json"), "w") as f:
-                f.write("{}")
+            data = os.path.join(home, ".local", "share", "nettime")
+            os.makedirs(data, mode=0o700); os.makedirs(fake)
+            config = os.path.join(data, "config.json")
+            with open(config, "w") as f:
+                f.write('{"adapter":"linksys-jnap"}')
+            os.chmod(config, 0o600)
             subprocess.check_call([sys.executable, "-m", "zipfile", "-e", z, pkg])
             self.assertFalse(os.access(os.path.join(pkg, "install-service.sh"), os.X_OK))  # why `sh ./` is documented
             log = os.path.join(d, "calls.log")

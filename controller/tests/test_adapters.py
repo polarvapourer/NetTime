@@ -15,6 +15,8 @@ if r['config'].get('fail'):
     sys.exit(1)
 if r['config'].get('malformed'):
     print('not json'); sys.exit(0)
+if r['config'].get('large_response'):
+    print('x' * (5 * 1024 * 1024)); sys.exit(0)
 state = r['config']['state']
 try:
     with open(state) as f: macs = json.load(f)
@@ -69,6 +71,11 @@ class Adapters(unittest.TestCase):
                 with self.assertRaises(RouterError): self.router.get_filter()
         with mock.patch.object(self.router, 'call', return_value=[{'id':'x','name':'x','macs':[],'connectedMacs':[]} ]):
             with self.assertRaises(RouterError): self.router.get_devices()
+
+    def test_rejects_output_above_the_response_limit(self):
+        router = CommandRouter(self.driver, dict(self.config, large_response=True))
+        with self.assertRaisesRegex(RouterError, 'response too large'):
+            router.get_filter()
 
     def test_old_configuration_defaults_to_linksys(self):
         self.assertEqual(from_config({'host':'192.168.1.1','pin':'test','auth':'synthetic'}).__class__.__name__, 'Router')

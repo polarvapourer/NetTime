@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0
+
+- Update planner dependencies and pin CI actions to reviewed commits.
+- Validate private controller data and record router write intent before changing the deny list.
+- Bound dashboard connections and schedule imports, and support an independently verified router fingerprint during setup.
+- Verify controller archives before replacing downloads and generate their SHA-256 checksum during packaging.
+
 ## 1.2.0
 
 - Add opt-in weekday school hours: allow access without charging the allowance, including when leisure access is paused or exhausted.

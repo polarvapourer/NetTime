@@ -3,6 +3,9 @@ import hashlib
 import hmac
 import json
 import os
+import socket
+import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .engine import UserError
@@ -14,6 +17,8 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/app.css": ("app.css", "text/css; charset=utf-8")}
 MAX_BODY = 64 * 1024
 MAX_TOKEN = 200
+MAX_CONNECTIONS = 16
+REQUEST_TIMEOUT = 10
 SECURITY_HEADERS = {
     "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
@@ -25,9 +30,60 @@ def token_hash(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+class LocalServer(ThreadingHTTPServer):
+    def __init__(self, address):
+        self.connections = threading.BoundedSemaphore(MAX_CONNECTIONS)
+        super().__init__(address, Handler)
+
+    def process_request(self, request, client_address):
+        if not self.connections.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self.connections.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.connections.release()
+
+    def handle_error(self, request, client_address):
+        error = sys.exc_info()[0]
+        if error and not issubclass(error, ConnectionError):
+            print("Dashboard request failed: %s" % error.__name__, file=sys.stderr)
+
+    def server_close(self):
+        super().server_close()
+        # Drain edits before releasing the service's data directory lock.
+        for _ in range(MAX_CONNECTIONS):
+            self.connections.acquire()
+        for _ in range(MAX_CONNECTIONS):
+            self.connections.release()
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "NetTime"
     sys_version = ""
+
+    def handle(self):
+        self.connection.settimeout(REQUEST_TIMEOUT)
+        deadline = threading.Timer(REQUEST_TIMEOUT, self._stop_reading)
+        deadline.daemon = True
+        deadline.start()
+        try:
+            super().handle()
+        finally:
+            deadline.cancel()
+
+    def _stop_reading(self):
+        try:
+            self.connection.shutdown(socket.SHUT_RD)
+        except OSError:
+            pass  # The client can close before the deadline.
 
     def log_message(self, fmt, *args):  # never log requests (headers/paths could carry secrets)
         pass
@@ -37,6 +93,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Connection", "close")
         for k, v in SECURITY_HEADERS.items():
             self.send_header(k, v)
         self.end_headers()
@@ -44,10 +101,14 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
 
     def _host_ok(self):
-        return self.headers.get("Host", "") in self.server.allowed_hosts
+        hosts = self.headers.get_all("Host", [])
+        return len(hosts) == 1 and hosts[0] in self.server.allowed_hosts
 
     def _authed(self):
-        h = self.headers.get("Authorization", "")
+        auth = self.headers.get_all("Authorization", [])
+        if len(auth) != 1:
+            return False
+        h = auth[0]
         if not h.startswith("Bearer ") or len(h) > MAX_TOKEN + 7:
             return False
         return hmac.compare_digest(token_hash(h[7:]), self.server.token_hash)
@@ -74,8 +135,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._host_ok():
             return self._send(403, {"error": "Forbidden host"})
-        origin = self.headers.get("Origin")
-        if origin is not None and origin not in self.server.allowed_origins:
+        origins = self.headers.get_all("Origin", [])
+        if len(origins) > 1 or any(origin not in self.server.allowed_origins for origin in origins):
             return self._send(403, {"error": "Cross-origin request refused"})
         if self.headers.get("Sec-Fetch-Site") not in (None, "same-origin", "none"):
             return self._send(403, {"error": "Cross-origin request refused"})
@@ -83,15 +144,20 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(401, {"error": "Access key required"})
         if (self.headers.get("Content-Type") or "").split(";")[0].strip() != "application/json":
             return self._send(415, {"error": "JSON required"})
-        try:
-            n = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            n = -1
-        if n < 0 or n > MAX_BODY:
+        lengths = self.headers.get_all("Content-Length", ["0"])
+        if ("Transfer-Encoding" in self.headers or len(lengths) != 1
+                or not lengths[0].isascii() or not lengths[0].isdigit()):
+            return self._send(400, {"error": "Invalid request body length"})
+        length = lengths[0].lstrip("0")
+        if len(length) > len(str(MAX_BODY)) or int(length or "0") > MAX_BODY:
             return self._send(413, {"error": "Body too large"})
+        n = int(length or "0")
         try:
-            body = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
-        except ValueError:
+            data = self.rfile.read(n)
+            if len(data) != n:
+                return self._send(400, {"error": "Incomplete request body"})
+            body = json.loads(data.decode("utf-8") or "{}")
+        except (ValueError, RecursionError):
             return self._send(400, {"error": "Invalid JSON"})
         if not isinstance(body, dict):
             return self._send(400, {"error": "Invalid JSON"})
@@ -138,8 +204,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def make_server(engine, tok_hash, port=8787):
-    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)  # loopback only
-    srv.daemon_threads = True
+    srv = LocalServer(("127.0.0.1", port))  # loopback only
     real = srv.server_address[1]
     srv.engine, srv.token_hash = engine, tok_hash
     srv.allowed_hosts = {"127.0.0.1:%d" % real, "localhost:%d" % real}
