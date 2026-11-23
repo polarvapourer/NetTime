@@ -38,6 +38,11 @@ class Archive(unittest.TestCase):
         dl = os.path.join(root, "public", "downloads")
         with open(os.path.join(dl, "nettime-controller.zip"), "rb") as a, open(os.path.join(dl, "nettime-controller-%s.zip" % v), "rb") as b:
             self.assertEqual(a.read(), b.read())
+        with open(os.path.join(dl, "SHA256SUMS.txt")) as f:
+            digest, filename = f.read().split()
+        self.assertEqual(filename, "nettime-controller-%s.zip" % v)
+        with open(os.path.join(dl, filename), "rb") as f:
+            self.assertEqual(digest, hashlib.sha256(f.read()).hexdigest())
 
 
 if __name__ == "__main__":

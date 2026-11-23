@@ -6,11 +6,11 @@ The initial public Raspberry Pi release is **1.0.0**. The cross-platform control
 
 ## Checklist
 
-1. Choose the next unused `1.x.0` version. After 1.1.0, the next release is 1.2.0.
+1. Choose the next unused `1.x.0` version.
 2. Set the same version in `package.json`, both root version fields in `package-lock.json`, and `controller/nettime/__init__.py`. Do not alter dependency or schedule-schema versions.
 3. Update the controller README, setup guide, planner download link, root README and changelog. Check any release-specific source links.
 4. Run `python3 scripts/check_release_version.py` (`py -3` on Windows). CI runs this check too.
-5. Rebuild with `npm run package:controller`, or the documented Python builder. Verify the ZIP's internal version and generate `SHA256SUMS.txt` for its exact filename and bytes.
+5. Rebuild with `npm run package:controller`, or the documented Python builder. Verify the ZIP's internal version and the generated `SHA256SUMS.txt` against the versioned download.
 6. Run the controller/planner checks and verify CI for the exact source commit. Do not include private controller configuration or credentials.
 7. Publish tag `v1.x.0` at that commit and attach the matching package and checksum. Use a GitHub no-reply address for commit author/committer metadata. Mark the newest release as latest; maintenance of an older release must not change that choice.
 8. Verify the public download and checksum, and that the source archive, program version and release title agree.

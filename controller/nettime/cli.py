@@ -2,11 +2,13 @@
 import argparse
 import getpass
 import os
+import re
 import secrets
 import signal
 import subprocess
 import sys
 import threading
+import warnings
 
 from . import VERSION
 from .adapters import from_config
@@ -33,9 +35,23 @@ def _new_key(store, cfg):
     print("  http://127.0.0.1:8787/#key=%s\n" % tok)
 
 
+def _hidden_input(prompt):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", getpass.GetPassWarning)
+        try:
+            return getpass.getpass(prompt)
+        except getpass.GetPassWarning:
+            raise ValueError("Open an interactive terminal that can hide router credentials") from None
+
+
 def cmd_setup(a, store):
-    init_tz()
     store.init()
+    with ControllerLock(store.dir):
+        return _setup(a, store)
+
+
+def _setup(a, store):
+    init_tz()
     previous = store.load_state()
     if previous["enforcement"] or previous["ownedBlock"] or previous["pending"]:
         raise ValueError("Turn blocking off and resolve any router block before changing setup")
@@ -45,19 +61,24 @@ def cmd_setup(a, store):
     print("NetTime setup (read-only). Blocking stays OFF until you switch it on in the page.\n")
     fp = fetch_cert_fingerprint(host)
     print("Router %s certificate fingerprint (SHA-256):\n  %s" % (host, pretty_fp(fp)))
-    if input("Pin this certificate for %s? Type yes: " % host).strip().lower() != "yes":
+    if a.expected_fingerprint:
+        expected = a.expected_fingerprint.replace(":", "").strip().lower()
+        if not re.fullmatch(r"[a-f0-9]{64}", expected) or not secrets.compare_digest(fp, expected):
+            raise ValueError("Router certificate does not match the expected SHA-256 fingerprint")
+    elif input("Pin this certificate for %s? Type yes: " % host).strip().lower() != "yes":
         print("Stopped. Nothing saved.")
         return 1
     if a.paste_header:
-        auth = check_pasted_header(getpass.getpass("Paste X-JNAP-Authorization value (hidden): ").strip())
+        auth = check_pasted_header(_hidden_input("Paste X-JNAP-Authorization value (hidden): ").strip())
     else:
-        auth = basic_auth_header(getpass.getpass("Router admin password (hidden): "))
+        auth = basic_auth_header(_hidden_input("Router admin password (hidden): "))
     try:
         f = Router(HttpsTransport(host, fp, auth)).get_filter()
     except RouterError as e:
         print("Router test failed: %s. Nothing saved." % e)
         return 1
-    print("Read test OK: MAC filter mode %s, %d entr%s in the list." % (f["mode"], len(f["macs"]), "y" if len(f["macs"]) == 1 else "ies"))
+    mode = f["mode"] if f["mode"] in ("Deny", "Allow", "Disabled") else "unrecognised"
+    print("Read test OK: MAC filter mode %s, %d entr%s in the list." % (mode, len(f["macs"]), "y" if len(f["macs"]) == 1 else "ies"))
     old = store.load_config() or {}
     cfg = {"adapter": "linksys-jnap", "host": host, "pin": fp, "auth": auth, "tokenHash": old.get("tokenHash")}
     store.save_config(cfg)
@@ -106,12 +127,18 @@ def st_exists(store):
 
 
 def cmd_new_key(a, store):
+    store.init()
+    with ControllerLock(store.dir):
+        return _rotate_key(store)
+
+
+def _rotate_key(store):
     cfg = store.load_config()
     if not cfg:
         print("Run setup first.")
         return 1
     _new_key(store, cfg)
-    print("Restart the controller to use it: python -m nettime service restart, or restart foreground serve.")
+    print("Start the controller to use the new key: python -m nettime service start, or run serve.")
     return 0
 
 
@@ -150,7 +177,8 @@ def cmd_doctor(a, store):
     r = _router(cfg)
     try:
         f = r.get_filter()
-        print("  OK   Router login and read work (mode %s, %d entries)" % (f["mode"], len(f["macs"])))
+        mode = f["mode"] if f["mode"] in ("Deny", "Allow", "Disabled") else "unrecognised"
+        print("  OK   Router login and read work (mode %s, %d entries)" % (mode, len(f["macs"])))
         try:
             devs = r.get_devices()
             print("  OK   Device list readable (%d devices)" % len(devs))
@@ -219,6 +247,7 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd")
     s = sub.add_parser("setup", help="pin router certificate, check login (read-only), create access key")
     s.add_argument("--router", default="192.168.1.1")
+    s.add_argument("--expected-fingerprint", help="independently verified SHA-256 fingerprint of the router certificate")
     s.add_argument('--adapter', choices=('linksys-jnap', 'command'), default='linksys-jnap')
     s.add_argument('--driver', help='absolute path to a trusted local driver (.py or executable)')
     s.add_argument('--driver-config', help='path to a private JSON object for that driver')

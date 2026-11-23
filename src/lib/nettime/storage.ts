@@ -3,13 +3,14 @@ import { DAYS, TIMEZONE, defaultSettings, defaultSchoolHours, validateAway, vali
 
 export const SETTINGS_KEY = "nettime.settings.v1";
 export const BONUS_KEY = "nettime.bonus.v1";
+export const MAX_SETTINGS_BYTES = 64 * 1024;
 
 const dayEnum = z.enum(DAYS);
 const minutes = z.number().int("Allowance must be whole minutes").min(0).max(1440, "Allowance cannot exceed 1440 minutes");
 
 export const settingsSchema = z.object({
-  schemaVersion: z.literal(1, { errorMap: () => ({ message: "Unsupported schemaVersion (expected 1)" }) }),
-  timezone: z.literal(TIMEZONE, { errorMap: () => ({ message: `timezone must be "${TIMEZONE}"` }) }),
+  schemaVersion: z.literal(1, { error: "Unsupported schemaVersion (expected 1)" }),
+  timezone: z.literal(TIMEZONE, { error: `timezone must be "${TIMEZONE}"` }),
   deviceLabel: z.string().trim().min(1).max(40),
   weekly: z.object(Object.fromEntries(DAYS.map((d) => [d, minutes.nullable()])) as Record<(typeof DAYS)[number], z.ZodNullable<typeof minutes>>).strict(),
   exceptions: z.array(z.object({
@@ -17,23 +18,23 @@ export const settingsSchema = z.object({
     days: z.array(dayEnum), start: z.string(), end: z.string(),
   }).strict().superRefine((e, ctx) => {
     const err = validateException(e);
-    if (err) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Exception "${e.label}": ${err}` });
+    if (err) ctx.addIssue({ code: "custom", message: `Exception "${e.label}": ${err}` });
   })).max(10),
   leisurePaused: z.boolean(),
   schoolHours: z.object({ enabled: z.boolean(), start: z.string(), end: z.string() }).strict()
     .superRefine((s, ctx) => {
       const error = validateException({ days: ["mon"], start: s.start, end: s.end });
-      if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+      if (error) ctx.addIssue({ code: "custom", message: error });
     }).default(defaultSchoolHours),
   awayWindows: z.array(z.object({
     id: z.string().min(1).max(64), label: z.string().min(1).max(40), enabled: z.boolean(),
     days: z.array(dayEnum), start: z.string(), end: z.string(),
   }).strict().superRefine((w, ctx) => {
     const error = validateAway(w);
-    if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+    if (error) ctx.addIssue({ code: "custom", message: error });
   })).max(10).superRefine((windows, ctx) => {
     if (new Set(windows.map((w) => w.id)).size !== windows.length)
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Away period ids must be unique." });
+      ctx.addIssue({ code: "custom", message: "Away period ids must be unique." });
   }).default([]),
 }).strict();
 
@@ -46,6 +47,12 @@ export function parseSettings(raw: unknown): ParseResult {
 }
 
 export function importSettingsJson(text: string): ParseResult {
+  if (
+    text.length > MAX_SETTINGS_BYTES ||
+    new TextEncoder().encode(text).length > MAX_SETTINGS_BYTES
+  ) {
+    return { ok: false, errors: ["Settings file exceeds 64 KiB."] };
+  }
   let raw: unknown;
   try { raw = JSON.parse(text); } catch { return { ok: false, errors: ["File is not valid JSON."] }; }
   return parseSettings(raw);

@@ -9,10 +9,23 @@ PY="${NETTIME_PYTHON:-$(command -v python3)}"
 USER_NAME="$(id -un)"
 DATA="${NETTIME_DATA:-$HOME/.local/share/nettime}"
 "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3,7) else 1)' || { echo "Python 3.7+ needed"; exit 1; }
-[ -f "$DATA/config.json" ] || { echo "Run 'python3 -m nettime setup' first."; exit 1; }
-mkdir -p "$DATA"; chmod 700 "$DATA"; chmod 600 "$DATA"/*.json
+cd "$DIR"
+"$PY" - "$DATA" <<'DATAPY'
+import sys
+from nettime.store import Store
+
+store = Store(sys.argv[1])
+try:
+    config = store.load_config()
+    if config is None:
+        raise ValueError("Run 'python3 -m nettime setup' first.")
+    store.load_state()
+except (OSError, ValueError) as exc:
+    sys.exit(str(exc))
+DATAPY
 UNIT="${NETTIME_UNIT_PATH:-/etc/systemd/system/nettime.service}"  # override only for tests
 TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
 "$PY" - "$DIR" "$PY" "$USER_NAME" "$DATA" > "$TMP" <<'UNITPY'
 import sys
 
@@ -45,12 +58,11 @@ WantedBy=multi-user.target
 UNITPY
 if [ -e "$UNIT" ] && ! cmp -s "$TMP" "$UNIT"; then
   if ! grep -q "NetTime home controller" "$UNIT"; then
-    echo "$UNIT exists and is not NetTime's. Not overwriting."; rm -f "$TMP"; exit 1
+    echo "$UNIT exists and is not NetTime's. Not overwriting."; exit 1
   fi
   echo "Updating existing NetTime service file."
 fi
 sudo install -m 644 "$TMP" "$UNIT"
-rm -f "$TMP"
 sudo systemctl daemon-reload
 sudo systemctl enable nettime
 sudo systemctl restart nettime

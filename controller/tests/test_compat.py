@@ -45,7 +45,7 @@ class Compat(unittest.TestCase):
 
 STDLIB = {"argparse", "ast", "base64", "calendar", "copy", "getpass", "hashlib", "hmac", "http", "ipaddress", "json",
           "math", "os", "re", "secrets", "shutil", "signal", "socket", "ssl", "stat", "sys", "tempfile", "threading",
-          "time", "unittest", "zipfile", "subprocess", "io", "datetime", "ctypes", "plistlib", "fcntl", "msvcrt"}
+          "time", "unittest", "warnings", "zipfile", "subprocess", "io", "datetime", "ctypes", "plistlib", "fcntl", "msvcrt"}
 
 if __name__ == "__main__":
     unittest.main()

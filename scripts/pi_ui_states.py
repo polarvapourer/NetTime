@@ -1,6 +1,7 @@
 """Browser checks for the Pi page states (mocked API, no Pi/router). Run: python3 scripts/pi_ui_states.py"""
 import asyncio, copy, json
 from pathlib import Path
+from tempfile import mkdtemp
 from playwright.async_api import async_playwright
 
 STATIC = Path(__file__).resolve().parent.parent / "controller/nettime/static"
@@ -20,6 +21,8 @@ def check(cond, what):
 
 async def main():
     st = {"snap": copy.deepcopy(BASE), "down": False, "release": [], "cleared": 0}
+    screenshots = Path(mkdtemp(prefix="nettime-ui-"))
+    print("Screenshots: %s" % screenshots)
     async def handle(route, req):
         path = req.url.split("8799", 1)[1].split("?")[0]
         if path.startswith("/api/"):
@@ -42,8 +45,10 @@ async def main():
                     {"mac": "aa:bb:cc:00:00:01", "connected": False, "reason": None},
                     {"mac": "aa:bb:cc:00:00:02", "connected": True, "reason": None}]}]})
             return await route.fulfill(json=st["snap"])
-        f = STATIC / ("index.html" if path in ("/", "") else path.lstrip("/").split("/", 1)[-1])
-        if not f.exists(): f = STATIC / path.lstrip("/")
+        name = {"/": "index.html", "/app.js": "app.js", "/app.css": "app.css"}.get(path)
+        if name is None:
+            return await route.fulfill(status=404)
+        f = STATIC / name
         ct = {"js": "text/javascript", "css": "text/css"}.get(f.suffix[1:], "text/html")
         await route.fulfill(body=f.read_bytes(), content_type=ct)
     async with async_playwright() as p:
@@ -98,7 +103,7 @@ async def main():
         check((await page.locator("#devices .dev button").all_inner_texts()) == ["Select", "Select"], "rows refreshed to Select")
         await page.locator("#devices .dev button").nth(1).click(); await page.wait_for_timeout(400)
         check((await page.locator("#devices .dev button").all_inner_texts()) == ["Select", "Selected"], "new selection reflected in rows")
-        await page.screenshot(path="/tmp/browser/pi/selected.png")
+        await page.screenshot(path=screenshots / "selected.png")
         # connection lost then recovery, unsaved input kept
         await page.fill("#day-mon", "42")
         st["down"] = True
@@ -107,7 +112,7 @@ async def main():
         check(await txt("#mode-pill") == "Controller connection unknown", "pill shows connection unknown")
         check(await page.locator("#save").is_disabled() and await page.locator("#enf-btn").is_disabled(), "controls disabled")
         check(await page.locator("#unselect-btn").is_disabled() and await page.locator("#devices .dev button").first.is_disabled(), "unselect and rows disabled when Pi lost")
-        await page.screenshot(path="/tmp/browser/pi/lost.png")
+        await page.screenshot(path=screenshots / "lost.png")
         st["down"] = False
         await page.wait_for_timeout(10500)
         check(await page.locator("#lost").is_hidden(), "notice cleared on reconnect")

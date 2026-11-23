@@ -10,7 +10,6 @@ import hmac
 import http.client
 import ipaddress
 import json
-import re
 import socket
 import ssl
 
@@ -28,7 +27,7 @@ AUTH_RESULTS = {"_ErrorUnauthorized"}
 # Assumed names for "this action does not exist" (not observed live).
 UNKNOWN_ACTION_RESULTS = {"_ErrorUnknownAction", "_ErrorInvalidAction", "_ErrorUnsupportedAction"}
 MAX_RESPONSE = 4 * 1024 * 1024
-_RESULT = re.compile(r"^_?[A-Za-z]{1,64}$")
+PRIVATE_NETWORKS = tuple(ipaddress.ip_network(cidr) for cidr in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 
 
 class RouterError(Exception):
@@ -46,7 +45,7 @@ class PinMismatch(RouterError):
 
 def validate_router_host(host):
     ip = ipaddress.ip_address(host)
-    if ip.version != 4 or not ip.is_private or ip.is_loopback or ip.is_link_local:
+    if not any(ip in network for network in PRIVATE_NETWORKS):
         raise ValueError("Router address must be a private IPv4 address such as 192.168.1.1")
     return str(ip)
 
@@ -146,7 +145,7 @@ class HttpsTransport(object):
             raise RouterError("schema", "Router response too large")
         try:
             parsed = json.loads(data.decode("utf-8"))
-        except ValueError:
+        except (ValueError, RecursionError):
             raise RouterError("schema", "Router response was not JSON")
         if not isinstance(parsed, dict):
             raise RouterError("schema", "Unexpected router response")
@@ -206,12 +205,12 @@ class Router(object):
         if result == "OK":
             out = r.get("output", {})
             return out if isinstance(out, dict) else {}
-        code = result if isinstance(result, str) and _RESULT.match(result) else "unknown"
+        code = result if isinstance(result, str) else "unknown"
         if code in AUTH_RESULTS:
             raise RouterError("auth", "Router rejected the login")
         if code in UNKNOWN_ACTION_RESULTS:
             raise RouterError("unknown-action", "Router does not support this request")
-        raise RouterError("router-result", "Router returned %s" % code)
+        raise RouterError("router-result", "Router did not confirm success")
 
     def get_filter(self):
         o = self.call("GetMACFilterSettings")
@@ -240,17 +239,20 @@ class Router(object):
         return o.get("deviceID") if isinstance(o.get("deviceID"), str) else None
 
 
-def apply_target(router, target, want_blocked):
+def apply_target(router, target, want_blocked, expected=None, before_write=None):
     """Add/remove ONLY `target` in the Deny list, preserving every other entry, then read back.
 
     Returns dict(status=unchanged|confirmed|refused|write-failed|unconfirmed|readback-mismatch, message).
     """
-    if not is_unicast(canonical_mac(target)):
+    target = canonical_mac(target)
+    if not is_unicast(target):
         return {"status": "refused", "message": "Target is not a valid unicast MAC address"}
     f = router.get_filter()  # always a fresh read before any mutation
     if f["mode"] != "Deny":
-        return {"status": "refused", "message": "Router MAC filter mode is %s, not Deny; NetTime will not change it" % f["mode"][:20]}
+        return {"status": "refused", "message": "Router MAC filter mode must be Deny"}
     present = target in f["macs"]
+    if expected is not None and present != expected:
+        return {"status": "refused", "message": "The device's router entry changed before NetTime could write"}
     if present == want_blocked:
         return {"status": "unchanged", "message": "Router already in the wanted state"}
     if want_blocked:
@@ -261,6 +263,8 @@ def apply_target(router, target, want_blocked):
         new = [r for r, c in zip(f["raw"], f["macs"]) if c != target]
     others = sorted(c for c in f["macs"] if c != target)
     ambiguous = False
+    if before_write is not None:
+        before_write()
     try:
         router.set_filter(new)
     except PinMismatch:

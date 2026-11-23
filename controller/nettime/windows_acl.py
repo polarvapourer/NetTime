@@ -74,11 +74,19 @@ def protect(path, directory=False):
 
 def private_ok(path):
     adv, kernel = _api()
-    sd, dacl = ctypes.c_void_p(), ctypes.c_void_p()
-    error = adv.GetNamedSecurityInfoW(str(path), 1, 4, None, None, ctypes.byref(dacl), None, ctypes.byref(sd))
+    sd, dacl, owner = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    error = adv.GetNamedSecurityInfoW(str(path), 1, 5, ctypes.byref(owner), None, ctypes.byref(dacl), None, ctypes.byref(sd))
     if error:
         raise ctypes.WinError(error)
     try:
+        wanted = {current_sid(), 'S-1-5-18'}  # this account and SYSTEM
+        owner_text = W.LPWSTR()
+        _check(adv.ConvertSidToStringSidW(owner, ctypes.byref(owner_text)))
+        try:
+            if owner_text.value not in wanted and owner_text.value != 'S-1-5-32-544':
+                return False  # Elevated users may create files owned by Administrators.
+        finally:
+            kernel.LocalFree(owner_text)
         control, revision = W.WORD(), W.DWORD()
         _check(adv.GetSecurityDescriptorControl(sd, ctypes.byref(control), ctypes.byref(revision)))
         if not dacl or not control.value & 0x1000:  # SE_DACL_PROTECTED; no inherited broad grants
@@ -87,7 +95,6 @@ def private_ok(path):
             _fields_ = [('count', W.DWORD), ('used', W.DWORD), ('free', W.DWORD)]
         size = AclSize()
         _check(adv.GetAclInformation(dacl, ctypes.byref(size), ctypes.sizeof(size), 2))
-        wanted = {current_sid(), 'S-1-5-18'}  # this account and SYSTEM
         seen = set()
         for index in range(size.count):
             ace = ctypes.c_void_p()

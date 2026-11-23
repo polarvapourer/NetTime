@@ -7,7 +7,7 @@ export const Route = createFileRoute("/setup")({
   component: SetupPage,
 });
 
-const ZIP = "nettime-controller-1.2.0.zip";
+const ZIP = "nettime-controller-1.3.0.zip";
 const guide = "https://github.com/polarvapourer/NetTime/blob/main/docs/SETUP.md";
 const routers = "https://github.com/polarvapourer/NetTime/blob/main/controller/ROUTERS.md";
 

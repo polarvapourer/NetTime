@@ -3,9 +3,38 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
 
 from .macs import canonical_mac, is_unicast
 from .router import HttpsTransport, Router, RouterError, MAX_RESPONSE
+
+DRIVER_TIMEOUT = 20
+
+
+def _send_request(stream, payload):
+    remaining = memoryview(payload)
+    try:
+        with stream:
+            while remaining:
+                written = stream.write(remaining)
+                if not written:
+                    break
+                remaining = remaining[written:]
+    except (OSError, ValueError):
+        pass  # The driver may exit before consuming all input.
+
+
+def _read_response(stream, response):
+    try:
+        with stream:
+            while len(response) <= MAX_RESPONSE:
+                chunk = stream.read(min(64 * 1024, MAX_RESPONSE + 1 - len(response)))
+                if not chunk:
+                    break
+                response.extend(chunk)
+    except (OSError, ValueError):
+        pass  # The parent may close the pipe after a timeout.
 
 
 class CommandRouter(object):
@@ -18,16 +47,33 @@ class CommandRouter(object):
     def call(self, action, **args):
         command = [sys.executable, self.driver] if self.driver.endswith('.py') else [self.driver]
         request = {'protocol': 1, 'action': action, 'config': self.config, 'arguments': args}
+        payload = json.dumps(request).encode('utf-8')
+        response = bytearray()
         try:
-            result = subprocess.run(command, input=json.dumps(request).encode('utf-8'),
-                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20)
+            with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                  stderr=subprocess.DEVNULL, bufsize=0) as process:
+                deadline = time.monotonic() + DRIVER_TIMEOUT
+                writer = threading.Thread(target=_send_request, args=(process.stdin, payload), daemon=True)
+                reader = threading.Thread(target=_read_response, args=(process.stdout, response), daemon=True)
+                try:
+                    writer.start()
+                    reader.start()
+                    reader.join(DRIVER_TIMEOUT)
+                    if reader.is_alive():
+                        raise subprocess.TimeoutExpired(command, DRIVER_TIMEOUT)
+                    if len(response) > MAX_RESPONSE:
+                        raise RouterError('schema', 'Router driver response too large')
+                    ret = process.wait(timeout=max(0, deadline - time.monotonic()))
+                finally:
+                    if process.poll() is None:
+                        process.kill()
         except (OSError, subprocess.TimeoutExpired):
             raise RouterError('network', 'Router driver could not complete the request')
-        if result.returncode or len(result.stdout) > MAX_RESPONSE:
+        if ret:
             raise RouterError('router-result', 'Router driver failed; check its private diagnostics')
         try:
-            data = json.loads(result.stdout.decode('utf-8'))
-        except (ValueError, UnicodeError):
+            data = json.loads(response.decode('utf-8'))
+        except (ValueError, RecursionError):
             raise RouterError('schema', 'Router driver returned invalid JSON')
         if not isinstance(data, dict) or data.get('ok') is not True or 'output' not in data:
             raise RouterError('router-result', 'Router driver did not confirm success')

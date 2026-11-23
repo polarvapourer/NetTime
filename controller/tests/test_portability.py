@@ -48,6 +48,27 @@ class Portability(unittest.TestCase):
                 self.assertEqual(store.load_config()['iteration'], n)
                 self.assertTrue(private_ok(store.config_path, 0o600))
 
+    @unittest.skipIf(os.name == "nt", "POSIX ownership and modes")
+    def test_refuses_to_read_nonprivate_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(tmp)
+            store.save_config({"adapter": "linksys-jnap"})
+            os.chmod(store.config_path, 0o644)
+            with self.assertRaisesRegex(ValueError, "data must be private"):
+                store.load_config()
+
+    @unittest.skipIf(os.name == "nt", "creating symlinks requires Windows privileges")
+    def test_rejects_linked_data_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = os.path.join(tmp, "directory")
+            os.mkdir(directory)
+            os.chmod(directory, 0o750)
+            alias = os.path.join(tmp, "alias")
+            os.symlink(directory, alias)
+            with self.assertRaisesRegex(ValueError, "ordinary private directory"):
+                Store(alias).init()
+            self.assertEqual(os.stat(directory).st_mode & 0o777, 0o750)
+
     def test_lock_rejects_second_process_and_is_released(self):
         with tempfile.TemporaryDirectory() as tmp:
             code = 'from nettime.host import ControllerLock; import sys\nwith ControllerLock(sys.argv[1]): pass'

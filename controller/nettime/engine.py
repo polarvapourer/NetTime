@@ -25,6 +25,8 @@ class Engine(object):
         self.st = store.load_state()
         for k, v in (("pending", None), ("ownedBlock", False)):
             self.st.setdefault(k, v)
+        if self.st["enforcement"] and self.st["pending"] and not self.st["paused"]:
+            self.st["paused"] = "Paused after restart: a router change was interrupted. Check the router before resuming."
         self.self_macs = set(self_macs) if self_macs is not None else local_macs()
         self.last_sample = None
         self.devices = None        # fresh device list from this process only (never trusted across restarts)
@@ -40,7 +42,12 @@ class Engine(object):
     def _save(self):
         keep = sorted(self.st["usage"])[-KEEP_DAYS:]
         self.st["usage"] = {k: self.st["usage"][k] for k in keep}
-        self.store.save_state(self.st)
+        try:
+            self.store.save_state(self.st)
+        except (OSError, ValueError):
+            if self.st["enforcement"]:
+                self._pause("Could not save controller state. Check NetTime's data directory before resuming.")
+            raise
 
     def _err(self, e):
         self.status["router"] = "tls-pin" if isinstance(e, PinMismatch) else "error"
@@ -140,12 +147,14 @@ class Engine(object):
             # external change detection: pause automation, do not undo the change
             if self.active():
                 if f["mode"] != "Deny":
-                    self._pause("Router filter mode changed to %s outside NetTime" % f["mode"][:20])
+                    self._pause("Router filter mode changed outside NetTime")
                 elif observed != self.st["expectedBlocked"]:
                     self._pause("The device was %s in the router outside NetTime"
                                 % ("unblocked" if self.st["expectedBlocked"] else "blocked"))
                     if not observed:
                         self.st["ownedBlock"] = False
+                elif self._forbidden_reason(target):
+                    self._pause("The selected device is now reported as the controller or network infrastructure")
 
             # metering: selected MAC router-reported connected AND rule allowed at both samples
             allowed_now = self.status["connection"] == "connected" and observed is False
@@ -173,7 +182,8 @@ class Engine(object):
             d = decide(self.st["settings"], lt, self.st["usage"].get(lt["date"], 0.0), self._bonus_minutes(lt["date"]))
             if self.active() and d["block"] is not None and d["block"] != observed:
                 try:
-                    res = apply_target(self.router, target, d["block"])
+                    res = apply_target(self.router, target, d["block"], expected=observed,
+                                       before_write=lambda: self._record_write(d["block"], now))
                 except RouterError as e:
                     self._err(e)
                     res = {"status": "unconfirmed", "message": "Router error (%s)" % e.code}
@@ -186,11 +196,16 @@ class Engine(object):
                     uncertain = res["status"] in ("unconfirmed", "readback-mismatch")
                     self._pause(("Rule uncertain - check router. " if uncertain else "Router change refused. ")
                                 + res["message"],
-                                pending={"want": d["block"], "status": res["status"], "at": now})
+                                pending={"want": d["block"], "status": res["status"], "at": now}
+                                if self.st["pending"] else None)
                     self._save()
                     return False
             self._save()
             return True
+
+    def _record_write(self, blocked, now):
+        self.st["pending"] = {"want": blocked, "status": "write-in-progress", "at": now}
+        self._save()
 
     # ---------- owner actions
     def activation_problems(self, f=None, resuming=False):
@@ -310,7 +325,9 @@ class Engine(object):
                 raise UserError("; ".join(probs))
             observed = self.st["target"] in f["macs"]
             pend = self.st["pending"] or {}
-            owned = observed and (self.st["ownedBlock"] or pend.get("want") is True)
+            owned = observed and self.st["ownedBlock"]
+            if observed and not owned and pend.get("want") is True:
+                raise UserError("NetTime could not confirm who added this block. Switch blocking off and use 'Check uncertain block'.")
             if observed and not owned:
                 raise UserError("The device is in the deny list but NetTime did not add it. Remove it in the router or switch blocking off.")
             self.st.update(paused=None, pending=None, expectedBlocked=observed, ownedBlock=owned)
