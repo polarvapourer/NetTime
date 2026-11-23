@@ -12,7 +12,9 @@
     try {
       var linkKey = decodeURIComponent(location.hash.slice(5));
       if (/^[A-Za-z0-9_-]{1,200}$/.test(linkKey)) sessionStorage.setItem(KEY, linkKey);
-    } catch (e) { /* Ignore malformed fragments. */ }
+    } catch (e) {
+      /* Ignore malformed fragments. */
+    }
     history.replaceState(null, "", location.pathname);
   }
 
@@ -221,7 +223,10 @@
   $("import-file").addEventListener("change", function (ev) {
     var f = ev.target.files[0]; if (!f) return;
     ev.target.value = "";
-    if (f.size > MAX_IMPORT) { say("Settings file exceeds 64 KiB.", true); return; }
+    if (f.size > MAX_IMPORT) {
+      say("Settings file exceeds 64 KiB.", true);
+      return;
+    }
     f.text().then(function (txt) {
       var parsed; try { parsed = JSON.parse(txt); } catch (e) { say("File is not valid JSON.", true); return; }
       return api("POST", "/api/import", {settings: parsed}).then(function (r) { say(r.message); return refresh(true); });
